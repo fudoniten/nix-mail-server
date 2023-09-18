@@ -63,7 +63,7 @@ in {
     };
   };
 
-  config = mkif cfg.enable {
+  config = mkIf cfg.enable {
     services.nginx = {
       virtualHosts = {
         "${cfg.smtp.hostname}".locations."/metrics" = {
