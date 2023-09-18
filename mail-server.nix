@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
-with lib; {
+with lib;
+let cfg = config.fudo.mail;
+in {
   options.fudo.mail = with types; {
     enable = mkEnableOption "Enable mail server.";
 
