@@ -62,6 +62,12 @@ in {
             scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
           }
         '';
+
+        "rbl.conf".text = ''
+          rbls {
+            an_rbl
+          }
+        '';
       };
 
       overrides."milter_headers.conf".text = "extended_spam_headers = true;";

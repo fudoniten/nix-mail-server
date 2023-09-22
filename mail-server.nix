@@ -75,6 +75,44 @@ in {
       };
     };
 
+    fudo.secrets.host-secrets."${hostname}" = {
+      dovecotLdapConfig = {
+        source-file = pkgs.writeText "dovecot-ldap.conf"
+          (concatStringsSep "\n" [
+            "uris = ldap://ldap-proxymine:${ldapPort}"
+            "ldap_version = 3"
+            "dn = ${cfg.ldap.bind-dn}"
+            "dnpass = ${readFile cfg.ldap.bind-password-file}"
+            "auth_bind = yes"
+            "auth_bind_userdn = uid=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
+            "base = ${cfg.ldap.base}"
+          ]);
+        target-file = "/run/dovecot-secret/ldap.conf";
+      };
+    };
+
+    users.users = {
+      mailserver-dovecot = {
+        uid = 4455;
+        isSystemUser = true;
+      };
+      mailserver-antivirus = {
+        uid = 4456;
+        isSystemUser = true;
+
+      };
+      mailserver-dkim = {
+        uid = 4457;
+        isSystemUser = true;
+      };
+    };
+
+    systemd.tmpfiles.rules = [
+      "d ${cfg.state-directory}/dovecot   0700 mailserver-dovecot   - - -"
+      "d ${cfg.state-directory}/antivirus 0700 mailserver-antivirus - - -"
+      "d ${cfg.state-directory}/dkim      0700 mailserver-dkim      - - -"
+    ];
+
     virtualisation.arion.projects.mail-server.settings = let
       image = { pkgs, ... }: {
         project.name = "fudo-mailserver";
@@ -89,6 +127,10 @@ in {
           authPort = 5447;
           userdbPort = 5448;
           metricsPort = 5034;
+          mkUserMap = username:
+            let uid = config.users.users."${username}".uid;
+            in "${uid}:${uid}";
+
         in {
           smtp = {
             networks = [
@@ -96,14 +138,19 @@ in {
               # Needs access to internet to forward emails
               "external_network"
             ];
+            volumes = [
+              "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+            ];
             ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
             nixos = {
               useSystemd = true;
               configuration = [
                 (import ./postfix.nix)
+                (import ./dovecot.nix)
                 {
                   boot.tmpOnTmpfs = true;
                   system.nssModules = lib.mkForce [ ];
+
                   fudo.mail.postfix = {
                     enable = true;
                     debug = cfg.debug;
@@ -127,6 +174,19 @@ in {
                     sasl-domain = cfg.sasl-domain;
                     message-size-limit = cfg.message-size-limit;
                     ports = { metrics = metricsPort; };
+                    rspamd-server = {
+                      host = "antispam";
+                      port = antispamPort;
+                    };
+                    lmtp-server = {
+                      host = "imap";
+                      port = lmtpPort;
+                    };
+                    dkim-server = {
+                      host = "dkim";
+                      port = dkimPort;
+                    };
+                    ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   };
                 }
               ];
@@ -135,6 +195,11 @@ in {
           imap = {
             networks = [ "internal_network" ];
             ports = [ "143:143" "993:993" ];
+            user = mkUserMap "mailserver-dovecot";
+            volumes = [
+              "${cfg.state-directory}/dovecot:/state"
+              "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+            ];
             nixos = {
               useSystemd = true;
               configuration = [
@@ -145,7 +210,7 @@ in {
                   fudo.mail.dovecot = {
                     enable = true;
                     debug = cfg.debug;
-                    state-directory = "${cfg.state-directory}/dovecot";
+                    state-directory = "/state";
                     ports = {
                       lmtp = lmtpPort;
                       auth = authPort;
@@ -162,13 +227,7 @@ in {
                       host = "antispam";
                       port = antispamPort;
                     };
-                    ldap = mkIf cfg.ldap-proxy {
-                      host = "ldap-proxy";
-                      port = 3389;
-                      base = cfg.ldap.base;
-                      bind-dn = cfg.ldap.bind-dn;
-                      bind-password-file = cfg.ldap.bind-password-file;
-                    };
+                    ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   };
                 }
               ];
@@ -219,6 +278,8 @@ in {
               # Needs external access for database updates
               "external_network"
             ];
+            user = mkUserMap "mailserver-antivirus";
+            volumes = [ "${cfg.state-directory}/antivirus:/state" ];
             nixos = {
               useSystemd = true;
               configuration = [
@@ -228,7 +289,7 @@ in {
                   system.nssModules = lib.mkForce [ ];
                   fudo.mail.clamav = {
                     enable = true;
-                    state-directory = "${cfg.state-directory}/rspamd";
+                    state-directory = "/state";
                     port = antispamPort;
                   };
                 }
@@ -237,6 +298,8 @@ in {
           };
           dkim = {
             networks = [ "internal_network" ];
+            user = mkUserMap "mailserver-dkim";
+            volumes = [ "${cfg.state-directory}/dkim:/state" ];
             nixos = {
               useSystemd = true;
               configuration = [
@@ -250,7 +313,7 @@ in {
                     domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
                   };
                   port = dkimPort;
-                  state-directory = "${cfg.state-directory}/dkim";
+                  state-directory = "/state";
                 }
               ];
             };

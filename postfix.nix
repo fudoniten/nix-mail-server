@@ -118,6 +118,44 @@ in {
         default = 1725;
       };
     };
+
+    ldap-conf = mkOption {
+      type = str;
+      description = "Path to LDAP dovecot2 configuration.";
+    };
+
+    rspamd-server = {
+      host = mkOption {
+        type = str;
+        description = "Hostname of rspamd server.";
+      };
+      port = mkOption {
+        type = port;
+        description = "Port on which rspamd is running.";
+      };
+    };
+
+    lmtp-server = {
+      host = mkOption {
+        type = str;
+        description = "Hostname of lmtp server.";
+      };
+      port = mkOption {
+        type = port;
+        description = "Port on which lmtp is running.";
+      };
+    };
+
+    dkim-server = {
+      host = mkOption {
+        type = str;
+        description = "Hostname of dkim server.";
+      };
+      port = mkOption {
+        type = port;
+        description = "Port on which dkim is running.";
+      };
+    };
   };
 
   config = mkIf cfg.enable {
@@ -138,6 +176,44 @@ in {
         group = config.services.postfix.group;
         listenAddress = "127.0.0.1";
         port = cfg.metrics-port;
+      };
+
+      dovecot2 = {
+        enable = true;
+        enablePAM = false;
+        enableImap = false;
+        extraConfig = ''
+          # Extra Config
+          ${lib.optionalString cfg.debug "auth_debug = yes"}
+
+          # When looking up usernames, just use the name, not the full address
+          auth_username_format = %n
+
+          auth_mechanisms = login plain
+
+          passdb {
+            driver = ldap
+            args = ${ldapConfig}
+          }
+
+          userdb = {
+            driver = ldap
+            args = ${ldap-conf}
+          }
+
+          service auth {
+            unix_listener auth {
+              mode = 0600
+              user = ${config.services.postfix.user}
+              group = ${config.services.postfix.group}
+            }
+          }
+
+          service auth-worker {
+            user = ${config.services.dovecot2.user}
+            idle_kill = 3
+          }
+        '';
       };
 
       postfix = {
@@ -199,6 +275,52 @@ in {
           pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
           mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
+          sender-restrictions = [
+            "check_sender_access ${mapped-file "reject_senders"}"
+            "reject_sender_login_mismatch"
+            "reject_non_fqdn_sender"
+            "reject_unknown_sender_domain"
+            "permit_mynetworks"
+            "permit_sasl_authenticated"
+          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+            cfg.blacklist.dns) ++ [ "reject" ];
+
+          relay-restrictions = [
+            "reject_unauth_destination"
+            "reject_unauth_pipelining"
+            "reject_unauth_destination"
+            "reject_unknown_sender_domain"
+            "permit_mynetworks"
+            "permit_sasl_authenticated"
+          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+            cfg.blacklist.dns) ++ [ "reject" ];
+
+          recipient-restrictions = [
+            "check_sender_access ${mapped-file "reject_recipients"}"
+            "reject_unknown_sender_domain"
+            "reject_unknown_recipient_domain"
+            "reject_unauth_pipelining"
+            "reject_unauth_destination"
+            "reject_invalid_hostname"
+            "reject_non_fqdn_hostname"
+            "reject_non_fqdn_sender"
+            "reject_non_fqdn_recipient"
+            "check_policy_service unix:private/policy-spf"
+          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+            cfg.blacklist.dns)
+            ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
+
+          client-restrictions =
+            [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
+
+          helo-restrictions = [
+            "permit_mynetworks"
+            "reject_invalid_hostname"
+            "reject_non_fqdn_helo_hostname"
+            "reject_unknown_helo_hostname"
+          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+            cfg.blacklist.dns) ++ [ "permit" ];
+
         in {
           virtual_mailbox_domains = allDomains;
           virtual_mailbox_maps = mappedFile "virtual_mailbox_map";
@@ -209,7 +331,8 @@ in {
           # virtual_gid_maps = let gid = config.users.groups."${cfg.group}".gid;
           # in "static: ${toString gid}";
 
-          virtual_transport = "lmtp:unix:/run/dovecot2/dovecot-lmtp";
+          virtual_transport =
+            "lmtp:inet:${cfg.lmtp-server.host}:${cfg.lmtp-server.port}";
 
           message_size_limit = toString (cfg.message-size-limit * 1024 * 1024);
 
@@ -226,6 +349,7 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_local_domain = cfg.sasl-domain;
+          smtp_sasl_authenticated_header = "yes";
 
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_tls_security_options = "noanonymous";
@@ -241,47 +365,24 @@ in {
             "i {mail_addr} {client_addr} {client_name} {auth_type} {auth_authen} {auth_author} {mail_addr} {mail_host} {mail_mailer}";
 
           smtpd_milters = [
-            "unix:/run/rspamd/rspamd-milter.sock"
-            "unix:/var/run/opendkim/opendkim.sock"
+            "inet:${cfg.rspamd-server.host}:${cfg.rspamd-server.port}"
+            "inet:${cfg.dkim.host}:${cfg.dkim.port}"
           ];
 
           non_smtpd_milters = [
-            "unix:/run/rspamd/rspamd-milter.sock"
-            "unix:/var/run/opendkim/opendkim.sock"
+            "inet:${cfg.rspamd-server.host}:${cfg.rspamd-server.port}"
+            "inet:${cfg.dkim.host}:${cfg.dkim.port}"
           ];
 
-          smtpd_relay_restrictions = [
-            "permit_mynetworks"
-            "permit_sasl_authenticated"
-            "reject_unauth_destination"
-            "reject_unauth_pipelining"
-            "reject_unauth_destination"
-            "reject_unknown_sender_domain"
-          ];
+          helo_required = true;
 
-          smtpd_sender_restrictions = [
-            "check_sender_access ${mapped-file "reject_senders"}"
-            "permit_mynetworks"
-            "permit_sasl_authenticated"
-            "reject_unknown_sender_domain"
-          ];
+          smtpd_relay_restrictions = relay-restrictions;
 
-          smtpd_recipient_restrictions = [
-            "check_sender_access ${mapped-file "reject_recipients"}"
-            "permit_mynetworks"
-            "permit_sasl_authenticated"
-            "check_policy_service unix:private/policy-spf"
-            "reject_unknown_recipient_domain"
-            "reject_unauth_pipelining"
-            "reject_unauth_destination"
-            "reject_invalid_hostname"
-            "reject_non_fqdn_hostname"
-            "reject_non_fqdn_sender"
-            "reject_non_fqdn_recipient"
-          ];
+          smtpd_sender_restrictions = sender-restrictions;
 
-          smtpd_helo_restrictions =
-            [ "permit_mynetworks" "reject_invalid_hostname" "permit" ];
+          smtpd_recipient_restrictions = recipient-restrictions;
+
+          smtpd_helo_restrictions = helo-restrictions;
 
           # Handled by submission
           smtpd_tls_security_level = "may";
@@ -328,16 +429,16 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_client_restrictions = "permit_sasl_authenticated,reject";
-          smtpd_sender_restrictions =
-            "reject_sender_login_mismatch,reject_unknown_sender_domain";
-          smtpd_recipient_restrictions =
-            "reject_non_fqdn_recipient,reject_unknown_recipient_domain,permit_sasl_authenticated,reject";
+          smtpd_client_restrictions = client-restrictions;
+          smtpd_sender_restrictions = sender-restrictions;
+          smtpd_recipient_restrictions = recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
         masterConfig = {
-          "policy-spf" = let
+          # See: http://www.postfix.org/smtp.8.html
+          lmtp.args = [ "flags=DO" ];
+          policy-spf = let
             policySpfFile = pkgs.writeText "policyd-spf.conf"
               (cfg.postfix.policy-spf.extraConfig
                 + (lib.optionalString cfg.debug "debugLevel = 4"));
@@ -352,18 +453,19 @@ in {
               "${policydSpf}"
             ];
           };
-          "submission-header-cleanup" = let
+          submission-header-cleanup = let
             submissionHeaderCleanupRules =
               pkgs.writeText "submission_header_cleanup_rules" ''
                 # Removes sensitive headers from mails handed in via the submission port.
                 # See https://thomas-leister.de/mailserver-debian-stretch/
                 # Uses "pcre" style regex.
 
-                /^Received:/            IGNORE
-                /^X-Originating-IP:/    IGNORE
-                /^X-Mailer:/            IGNORE
-                /^User-Agent:/          IGNORE
-                /^X-Enigmail:/          IGNORE
+                /^Received:/                 IGNORE
+                /^X-Originating-IP:/         IGNORE
+                /^X-Mailer:/                 IGNORE
+                /^User-Agent:/               IGNORE
+                /^X-Enigmail:/               IGNORE
+                /^Message-ID:\s+<(.*?)@.*?>/ REPLACE Message-ID: <$1@${cfg.hostname}>
               '';
           in {
             type = "unix";

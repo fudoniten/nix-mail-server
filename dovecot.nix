@@ -54,7 +54,6 @@ in {
         description = "Port on which to serve metrics data.";
         default = 5034;
       };
-
     };
 
     mail-user = mkOption {
@@ -153,7 +152,7 @@ in {
           specialUse = "Sent";
         };
         Archive = {
-          atuo = "no";
+          auto = "no";
           specialUse = "Archive";
         };
         Flagged = {
@@ -180,44 +179,9 @@ in {
       default = 5;
     };
 
-    ldap = let
-      ldapOpts = {
-        options = {
-          host = mkOption {
-            type = str;
-            description = "LDAP hostname.";
-          };
-
-          port = mkOption {
-            type = str;
-            description = "Port on which LDAP is listening.";
-          };
-
-          base = mkOption {
-            type = str;
-            description = "Base of the LDAP server database.";
-            example = "dc=mydomain,dc=org";
-          };
-
-          bind-dn = mkOption {
-            type = str;
-            description = ''
-              DN used for fetching user information.
-
-              Needs access to homeDirectory, uidNumber, gidNumber, and uid, but not
-              password attributes.
-            '';
-          };
-
-          bind-password-file = mkOption {
-            type = str;
-            description = "Path to file containing bind password for bind-dn.";
-          };
-        };
-      };
-    in mkOption {
-      type = nullOr ldapOpts;
-      default = null;
+    ldap-conf = mkOption {
+      type = str;
+      description = "Path to LDAP dovecot2 configuration.";
     };
   };
 
@@ -240,7 +204,7 @@ in {
           group = cfg.mail-group;
         };
         "${cfg.metrics.user}" = {
-          isSystemUser = true;
+          isySstemUser = true;
           group = cfg.metrics.group;
         };
       };
@@ -306,6 +270,9 @@ in {
           name = "rspam_pipe_bin";
           paths = [ learnHam learnSpam ];
         };
+
+        mailUserUid = config.users.users."${cfg.mail-user}".uid;
+        mailUserGid = config.users.group."${cfg.mail-group}".gid;
       in ''
         ## Extra Config
 
@@ -331,6 +298,8 @@ in {
         # When looking up usernames, just use the name, not the full address
         auth_username_format = %n
 
+        auth_mechanisms = login plain
+
         service lmtp {
           # Enable logging in debug mode
           ${optionalString cfg.debug "executable = lmtp -L"}
@@ -346,36 +315,18 @@ in {
           # user = root
         }
 
-        auth_mechanisms = login plain
 
-        ${optionalString (cfg.dovecot.ldap != null) ''
-          passdb {
-            driver = ldap
-            args = ${cfg.dovecot.ldap.generated-ldap-config}
-          }
-        ''}
+        passdb {
+          driver = ldap
+          args = ${cfg.ldap-conf}
+        }
+
+        # All users map to one actual system user
         userdb {
           driver = static
           args = uid=${
             toString cfg.mail-user-id
           } home=${cfg.state-directory}/mail/%u
-        }
-
-        # Used by postfix to authorize users
-        service auth {
-          inet_listener auth {
-            address = 0.0.0.0
-            port = ${toString cfg.ports.auth}
-          }
-          inet_listener auth-userdb {
-            address = 0.0.0.0
-            port = ${toString cfg.ports.userdb}
-          }
-        }
-
-        service auth-worker {
-          user = ${config.services.dovecot2.user}
-          idle_kill = 3
         }
 
         service imap {
@@ -402,7 +353,7 @@ in {
           imapsieve_mailbox2_causes = COPY
           imapsieve_mailbox2_before = file:${sievePath}/report-ham.sieve
 
-          sieve_pipe_bin_dir = ${pipeBin}/pipe/bin
+          sieve_pipe_bin_dir = ${pipeBin}/bin
           sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
         }
 
