@@ -104,10 +104,10 @@ in {
     services.nginx = {
       virtualHosts = {
         "${cfg.smtp.hostname}".locations."/metrics" = {
-          proxyPass = "http://localhost:${metricsPort}/metrics";
+          proxyPass = "http://localhost:${toString metricsPort}/metrics";
         };
         "${cfg.imap.hostname}".locations."/metrics" = {
-          proxyPass = "http://localhost:${metricsPort}/metrics";
+          proxyPass = "http://localhost:${toString metricsPort}/metrics";
         };
       };
     };
@@ -377,7 +377,7 @@ in {
           };
           metrics-proxy = {
             networks = [ "internal_network" ];
-            ports = [ "${cfg.metricsPort}:80" ];
+            ports = [ "${toString cfg.metricsPort}:80" ];
             nixos = {
               useSystemd = true;
               configuration = {
@@ -392,13 +392,13 @@ in {
                     default = true;
                     locations = {
                       "/postfix" = {
-                        proxyPass = "http://smtp:${metricsPort}/";
+                        proxyPass = "http://smtp:${toString metricsPort}/";
                       };
                       "/dovecot" = {
-                        proxyPass = "http://imap:${metricsPort}/";
+                        proxyPass = "http://imap:${toString metricsPort}/";
                       };
                       "rspamd" = {
-                        proxyPass = "http://antispam:${metricsPort}/";
+                        proxyPass = "http://antispam:${toString metricsPort}/";
                       };
                     };
                   };
