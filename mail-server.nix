@@ -1,7 +1,8 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, ... }@toplevel:
 
 with lib;
 let cfg = config.fudo.mail;
+
 in {
   options.fudo.mail = with types; {
     enable = mkEnableOption "Enable mail server.";
@@ -22,6 +23,48 @@ in {
       default = [ ];
     };
 
+    ldap = {
+      authentik-host = mkOption {
+        type = str;
+        description = "Hostname of the LDAP outpost provider.";
+        default = "authentik.${toplevel.config.fudo.mail.primary-domain}";
+      };
+
+      outpost-token = mkOption {
+        type = str;
+        description = "Token with which to authenticate to the Authentik host.";
+      };
+
+      # bind-dn = mkOption {
+      #   type = str;
+      #   description = "DN as which to bind with the LDAP server.";
+      # };
+
+      # bind-password-file = mkOption {
+      #   type = str;
+      #   description =
+      #     "File containing password with which to bind with the LDAP server.";
+      # };
+
+      base = mkOption {
+        type = str;
+        description = "Base of the LDAP server.";
+        example = "dc=fudo,dc=org";
+      };
+
+      member-ou = mkOption {
+        type = str;
+        description = "Organizational unit containing users.";
+        default = "ou=members";
+      };
+    };
+
+    images.ldap-proxy = mkOption {
+      type = str;
+      description = "Docker image to use for LDAP proxy.";
+      default = "ghcr.io/goauthentik/ldap";
+    };
+
     smtp = {
       hostname = mkOption {
         type = str;
@@ -30,15 +73,10 @@ in {
         default = "smtp.${config.fudo.mail.primary-domain}";
       };
 
-      ssl = {
-        certificate = mkOption {
-          type = str;
-          description = "SSL certificate for the SMTP host.";
-        };
-        private-key = mkOption {
-          type = str;
-          description = "SSL private key for the SMTP host.";
-        };
+      ssl-directory = mkOption {
+        type = str;
+        description =
+          "Directory containing SSL certificates for SMTP hostname.";
       };
     };
 
@@ -50,15 +88,10 @@ in {
         default = "imap.${config.fudo.mail.primary-domain}";
       };
 
-      ssl = {
-        certificate = mkOption {
-          type = str;
-          description = "SSL certificate for the IMAP host.";
-        };
-        private-key = mkOption {
-          type = str;
-          description = "SSL private key for the IMAP host.";
-        };
+      ssl-directory = mkOption {
+        type = str;
+        description =
+          "Directory containing SSL certificates for IMAP hostname.";
       };
     };
   };
@@ -76,13 +109,22 @@ in {
     };
 
     fudo.secrets.host-secrets."${hostname}" = {
+      mailLdapProxyEnv = {
+        source-file = pkgs.writeText "ldap-proxy.env" ''
+          AUTHENTIK_HOST=${cfg.ldap.authentik-host}
+          AUTHENTIK_TOKEN=${cfg.ldap.outpost-token}
+          AUTHENTIK_INSECURE=false
+        '';
+        target-file = "/run/ldap-proxy/env";
+      };
+
       dovecotLdapConfig = {
         source-file = pkgs.writeText "dovecot-ldap.conf"
           (concatStringsSep "\n" [
-            "uris = ldap://ldap-proxymine:${ldapPort}"
+            "uris = ldap://ldap-proxy:3389"
             "ldap_version = 3"
-            "dn = ${cfg.ldap.bind-dn}"
-            "dnpass = ${readFile cfg.ldap.bind-password-file}"
+            # "dn = ${cfg.ldap.bind-dn}"
+            # "dnpass = ${readFile cfg.ldap.bind-password-file}"
             "auth_bind = yes"
             "auth_bind_userdn = uid=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
@@ -140,6 +182,7 @@ in {
             ];
             volumes = [
               "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+              "${cfg.smtp.ssl-directory}:/run/certs/smtp"
             ];
             ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
             nixos = {
@@ -168,8 +211,9 @@ in {
                       alias-users = cfg.alias-users;
                     };
                     ssl = {
-                      certificate = cfg.smtp.ssl.certificate;
-                      private-key = cfg.smtp.ssl.private-key;
+                      certificate =
+                        "/run/certs/smtp/fullchain.pem"; # FIXME: or just cert?
+                      private-key = "/run/certs/smtp/key.pem";
                     };
                     sasl-domain = cfg.sasl-domain;
                     message-size-limit = cfg.message-size-limit;
@@ -199,6 +243,7 @@ in {
             volumes = [
               "${cfg.state-directory}/dovecot:/state"
               "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+              "${cfg.imap.ssl-directory}:/run/certs/imap"
             ];
             nixos = {
               useSystemd = true;
@@ -220,8 +265,8 @@ in {
                     mail-user = cfg.mail-user;
                     mail-group = cfg.mail-group;
                     ssl = {
-                      certificate = cfg.imap.ssl.certificate;
-                      private-key = cfg.imap.ssl.private-key;
+                      certificate = "/run/certs/imap/fullchain.pem";
+                      private-key = "/run/certs/imap/key.pem";
                     };
                     rspamd = {
                       host = "antispam";
