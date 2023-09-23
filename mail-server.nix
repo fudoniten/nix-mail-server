@@ -1,7 +1,9 @@
 { config, lib, pkgs, ... }@toplevel:
 
 with lib;
-let cfg = config.fudo.mail;
+let
+  cfg = config.fudo.mail;
+  hostname = config.instance.hostname;
 
 in {
   options.fudo.mail = with types; {
