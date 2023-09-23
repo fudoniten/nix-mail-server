@@ -4,6 +4,7 @@ with lib;
 let
   cfg = config.fudo.mail;
   hostname = config.instance.hostname;
+  hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
 
 in {
   options.fudo.mail = with types; {
