@@ -5,6 +5,7 @@ let
   cfg = config.fudo.mail;
   hostname = config.instance.hostname;
   hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
+  metricsPort = 5034;
 
 in {
   options.fudo.mail = with types; {
@@ -180,7 +181,6 @@ in {
           lmtpPort = 24;
           authPort = 5447;
           userdbPort = 5448;
-          metricsPort = 5034;
           mkUserMap = username:
             let uid = config.users.users."${username}".uid;
             in "${uid}:${uid}";
