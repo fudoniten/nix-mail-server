@@ -58,7 +58,7 @@ in {
             symbol = "CLAM_VIRUS";
             type = "clamav";
             log_clean = true;
-            servers = "${cfg.antivirus.host}:${cfg.antivirus.port}";
+            servers = "${cfg.antivirus.host}:${toString cfg.antivirus.port}";
             scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
           }
         '';
