@@ -325,9 +325,7 @@ in {
         # All users map to one actual system user
         userdb {
           driver = static
-          args = uid=${
-            toString cfg.mail-user-id
-          } home=${cfg.state-directory}/mail/%u
+          args = uid=${toString mailUserUid} home=${cfg.state-directory}/mail/%u
         }
 
         service imap {
