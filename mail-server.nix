@@ -175,7 +175,7 @@ in {
           external_network.internal = false;
           internal_network.internal = true;
         };
-        serices = let
+        services = let
           antivirusPort = 15407;
           antispamPort = 11335;
           antispamControllerPort = 11336;
