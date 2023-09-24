@@ -188,17 +188,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    services = {
-      prometheus.exporters.dovecot = {
-        enable = true;
-        scopes = [ "user" "global" ];
-        user = cfg.metrics.user;
-        listenAddresses = "127.0.0.1";
-        port = cfg.metrics.port;
-        socketPath = "/var/run/dovecot2/old-stats";
-      };
-    };
-
     users = {
       users = {
         "${cfg.mail-user}" = {
@@ -224,167 +213,180 @@ in {
       ];
     };
 
-    dovecot2 = {
-      enable = true;
-      enableImap = true;
-      enableLmtp = true;
+    services = {
+      prometheus.exporters.dovecot = {
+        enable = true;
+        scopes = [ "user" "global" ];
+        user = cfg.metrics.user;
+        listenAddresses = "127.0.0.1";
+        port = cfg.metrics.port;
+        socketPath = "/var/run/dovecot2/old-stats";
+      };
 
-      mailUser = cfg.mail-user;
-      mailGroup = cfg.mail-group;
-      mailLocation = "maildir:${cfg.state-directory}/mail//%u/";
-      createMailUser = false;
+      dovecot2 = {
+        enable = true;
+        enableImap = true;
+        enableLmtp = true;
 
-      sslServerCert = cfg.ssl.certificate;
-      sslServerKey = cfg.ssl.private-key;
+        mailUser = cfg.mail-user;
+        mailGroup = cfg.mail-group;
+        mailLocation = "maildir:${cfg.state-directory}/mail//%u/";
+        createMailUser = false;
 
-      mailboxes = cfg.mailboxes;
+        sslServerCert = cfg.ssl.certificate;
+        sslServerKey = cfg.ssl.private-key;
 
-      modules = with pkgs; [ dovecot_pidgeonhole ];
-      protocols = [ "sieve" ];
+        mailboxes = cfg.mailboxes;
 
-      mailPlugins.globally.enable = [ "old_stats" ];
+        modules = with pkgs; [ dovecot_pidgeonhole ];
+        protocols = [ "sieve" ];
 
-      sieveScripts = {
-        after = builtins.toFile "spam.sieve" ''
-          require "fileinto";
+        mailPlugins.globally.enable = [ "old_stats" ];
 
-          if header :is "X-Spam" "Yes" {
-            fileinto "Junk";
-            stop;
+        sieveScripts = {
+          after = builtins.toFile "spam.sieve" ''
+            require "fileinto";
+
+            if header :is "X-Spam" "Yes" {
+              fileinto "Junk";
+              stop;
+            }
+          '';
+        };
+
+        extraConfig = let
+          # Add learn_ham & learn_spam to dovecot2 path for use by sieves
+          pipeBin = let
+            teachRspamd = msg:
+              pkgs.writeShellApplication {
+                name = "rspamd_${msg}";
+                runtimeInputs = with pkgs; [ rspamd ];
+                text =
+                  "exec rspamc -h ${cfg.rspamd.host}:${cfg.rspam.port} ${msg}";
+              };
+            learnHam = teachRspamd "learn_ham";
+            learnSpam = teachRspamd "learn_spam";
+          in pkgs.buildEnv {
+            name = "rspam_pipe_bin";
+            paths = [ learnHam learnSpam ];
+          };
+
+          mailUserUid = config.users.users."${cfg.mail-user}".uid;
+          mailUserGid = config.users.group."${cfg.mail-group}".gid;
+        in ''
+          ## Extra Config
+
+          mail_plugins = $mail_plugins
+
+          ${lib.optionalString cfg.debug ''
+            mail_debug = yes
+            auth_debug = yes
+            verbose_ssl = yes
+          ''}
+
+          protocol imap {
+            mail_max_userip_connections = ${toString cfg.max-user-connections}
+            mail_plugins = $mail_plugins imap_sieve
+          }
+
+          protocol lmtp {
+            mail_plugins = $mail_plugins sieve
+          }
+
+          mail_access_groups = ${cfg.mail-group}
+
+          # When looking up usernames, just use the name, not the full address
+          auth_username_format = %n
+
+          auth_mechanisms = login plain
+
+          service lmtp {
+            # Enable logging in debug mode
+            ${optionalString cfg.debug "executable = lmtp -L"}
+
+            inet_listener dovecot-lmtp {
+              address = 0.0.0.0
+              port = ${toString cfg.ports.lmtp}
+            }
+
+            # Drop privs, since all mail is owned by one user
+            user = ${cfg.mail-user}
+            # group = ${cfg.mail-group}
+            # user = root
+          }
+
+
+          passdb {
+            driver = ldap
+            args = ${cfg.ldap-conf}
+          }
+
+          # All users map to one actual system user
+          userdb {
+            driver = static
+            args = uid=${
+              toString mailUserUid
+            } home=${cfg.state-directory}/mail/%u
+          }
+
+          service imap {
+            vsz_limit = 1024M
+          }
+
+          namespace inbox {
+            separator = "/"
+            inbox = yes
+          }
+
+          plugin {
+            sieve_plugins = sieve_imapsieve sieve_extprograms
+            sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
+            sieve_default = file:${cfg.sieve-directory}/%u/default.sieve
+            sieve_default_name = default
+            # From elsewhere to Spam folder
+            imapsieve_mailbox1_name = Junk
+            imapsieve_mailbox1_causes = COPY
+            imapsieve_mailbox1_before = file:${sievePath}/report-spam.sieve
+            # From Spam folder to elsewhere
+            imapsieve_mailbox2_name = *
+            imapsieve_mailbox2_from = Junk
+            imapsieve_mailbox2_causes = COPY
+            imapsieve_mailbox2_before = file:${sievePath}/report-ham.sieve
+
+            sieve_pipe_bin_dir = ${pipeBin}/bin
+            sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
+          }
+
+          recipient_delimiter = +
+
+          lmtp_save_to_detail_mailbox = yes
+
+          lda_mailbox_autosubscribe = yes
+          lda_mailbox_autocreate = yes
+
+          service old-stats {
+            unix_listener old-stats {
+              user = ${cfg.metrics.user}
+              group = ${cfg.metrics.group}
+            }
+            fifo_listener old-stats-mail {
+              mode = 0660
+              user = ${config.services.dovecot2.user}
+              group = ${config.services.dovecot2.group}
+            }
+            fifo_listener old-stats-user {
+              mode = 0660
+              user = ${config.services.dovecot2.user}
+              group = ${config.services.dovecot2.group}
+            }
+          }
+
+          plugin {
+            old_stats_refresh = 30 secs
+            old_stats_track_cmds = yes
           }
         '';
       };
-
-      extraConfig = let
-        # Add learn_ham & learn_spam to dovecot2 path for use by sieves
-        pipeBin = let
-          teachRspamd = msg:
-            pkgs.writeShellApplication {
-              name = "rspamd_${msg}";
-              runtimeInputs = with pkgs; [ rspamd ];
-              text =
-                "exec rspamc -h ${cfg.rspamd.host}:${cfg.rspam.port} ${msg}";
-            };
-          learnHam = teachRspamd "learn_ham";
-          learnSpam = teachRspamd "learn_spam";
-        in pkgs.buildEnv {
-          name = "rspam_pipe_bin";
-          paths = [ learnHam learnSpam ];
-        };
-
-        mailUserUid = config.users.users."${cfg.mail-user}".uid;
-        mailUserGid = config.users.group."${cfg.mail-group}".gid;
-      in ''
-        ## Extra Config
-
-        mail_plugins = $mail_plugins
-
-        ${lib.optionalString cfg.debug ''
-          mail_debug = yes
-          auth_debug = yes
-          verbose_ssl = yes
-        ''}
-
-        protocol imap {
-          mail_max_userip_connections = ${toString cfg.max-user-connections}
-          mail_plugins = $mail_plugins imap_sieve
-        }
-
-        protocol lmtp {
-          mail_plugins = $mail_plugins sieve
-        }
-
-        mail_access_groups = ${cfg.mail-group}
-
-        # When looking up usernames, just use the name, not the full address
-        auth_username_format = %n
-
-        auth_mechanisms = login plain
-
-        service lmtp {
-          # Enable logging in debug mode
-          ${optionalString cfg.debug "executable = lmtp -L"}
-
-          inet_listener dovecot-lmtp {
-            address = 0.0.0.0
-            port = ${toString cfg.ports.lmtp}
-          }
-
-          # Drop privs, since all mail is owned by one user
-          user = ${cfg.mail-user}
-          # group = ${cfg.mail-group}
-          # user = root
-        }
-
-
-        passdb {
-          driver = ldap
-          args = ${cfg.ldap-conf}
-        }
-
-        # All users map to one actual system user
-        userdb {
-          driver = static
-          args = uid=${toString mailUserUid} home=${cfg.state-directory}/mail/%u
-        }
-
-        service imap {
-          vsz_limit = 1024M
-        }
-
-        namespace inbox {
-          separator = "/"
-          inbox = yes
-        }
-
-        plugin {
-          sieve_plugins = sieve_imapsieve sieve_extprograms
-          sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
-          sieve_default = file:${cfg.sieve-directory}/%u/default.sieve
-          sieve_default_name = default
-          # From elsewhere to Spam folder
-          imapsieve_mailbox1_name = Junk
-          imapsieve_mailbox1_causes = COPY
-          imapsieve_mailbox1_before = file:${sievePath}/report-spam.sieve
-          # From Spam folder to elsewhere
-          imapsieve_mailbox2_name = *
-          imapsieve_mailbox2_from = Junk
-          imapsieve_mailbox2_causes = COPY
-          imapsieve_mailbox2_before = file:${sievePath}/report-ham.sieve
-
-          sieve_pipe_bin_dir = ${pipeBin}/bin
-          sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
-        }
-
-        recipient_delimiter = +
-
-        lmtp_save_to_detail_mailbox = yes
-
-        lda_mailbox_autosubscribe = yes
-        lda_mailbox_autocreate = yes
-
-        service old-stats {
-          unix_listener old-stats {
-            user = ${cfg.metrics.user}
-            group = ${cfg.metrics.group}
-          }
-          fifo_listener old-stats-mail {
-            mode = 0660
-            user = ${config.services.dovecot2.user}
-            group = ${config.services.dovecot2.group}
-          }
-          fifo_listener old-stats-user {
-            mode = 0660
-            user = ${config.services.dovecot2.user}
-            group = ${config.services.dovecot2.group}
-          }
-        }
-
-        plugin {
-          old_stats_refresh = 30 secs
-          old_stats_track_cmds = yes
-        }
-      '';
     };
   };
 }
