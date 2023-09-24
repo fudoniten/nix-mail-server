@@ -99,11 +99,6 @@ in {
     mailboxes = let
       mailboxOpts = { name, ... }: {
         options = {
-          name = mkOption {
-            type = str;
-            description = "Mailbox Name.";
-            default = name;
-          };
           auto = mkOption {
             type = enum [ "no" "create" "subscribe" ];
             description = "Whether to auto-create/subscribe.";
@@ -153,10 +148,10 @@ in {
           auto = "create";
           specialUse = "Sent";
         };
-        # Archive = {
-        #   auto = "no";
-        #   specialUse = "Archive";
-        # };
+        Archive = {
+          auto = "no";
+          specialUse = "Archive";
+        };
         Flagged = {
           auto = "subscribe";
           specialUse = "Flagged";
