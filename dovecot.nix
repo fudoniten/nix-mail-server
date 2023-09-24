@@ -236,7 +236,7 @@ in {
 
         mailboxes = cfg.mailboxes;
 
-        modules = with pkgs; [ dovecot_pidgeonhole ];
+        modules = with pkgs; [ dovecot_pigeonhole ];
         protocols = [ "sieve" ];
 
         mailPlugins.globally.enable = [ "old_stats" ];
