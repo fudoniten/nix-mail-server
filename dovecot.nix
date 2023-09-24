@@ -8,7 +8,8 @@ let
     isRegularFile = _: type: type == "regular";
     sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
     headOrNull = lst: if lst == [ ] then null else head lst;
-    stripExt = ext: filename: headOrNull (match "(.+)[.]${ext}$" filename);
+    stripExt = ext: filename:
+      headOrNull (builtins.match "(.+)[.]${ext}$" filename);
     compileFile = filename: _:
       let
         filePath = ./sieves + "/${filename}";
