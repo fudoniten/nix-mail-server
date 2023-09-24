@@ -91,8 +91,10 @@ in {
       in [ "d ${cfg.state-directory} 0700 ${user} ${group} - -" ];
       services.opendkim = {
         serviceConfig = {
-          ExecStartPre = pkgs.writeShellScript "ensure-dkim-certs.sh"
-            (ensureAllDkimCerts cfg.state-directory cfg.domains);
+          ExecStartPre = [
+            (pkgs.writeShellScript "ensure-dkim-certs.sh"
+              (ensureAllDkimCerts cfg.state-directory cfg.domains))
+          ];
           ReadWritePaths = [ cfg.state-directory ];
         };
       };
