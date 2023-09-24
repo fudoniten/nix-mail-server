@@ -41,6 +41,12 @@ in {
       default = [ ];
     };
 
+    metricsPort = mkOption {
+      type = port;
+      description = "Port on which to serve metrics.";
+      default = metricsPort;
+    };
+
     ldap = {
       authentik-host = mkOption {
         type = str;
@@ -74,12 +80,6 @@ in {
         type = str;
         description = "Organizational unit containing users.";
         default = "ou=members";
-      };
-
-      metricsPort = mkOption {
-        type = port;
-        description = "Port on which to serve metrics.";
-        default = 5457;
       };
     };
 
