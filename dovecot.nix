@@ -195,7 +195,7 @@ in {
           group = cfg.mail-group;
         };
         "${cfg.metrics.user}" = {
-          isySstemUser = true;
+          isSystemUser = true;
           group = cfg.metrics.group;
         };
       };
