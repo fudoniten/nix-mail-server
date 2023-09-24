@@ -6,7 +6,7 @@ let
 
   sievePath = let
     isRegularFile = _: type: type == "regular";
-    sieves = filter isRegularFile (builtins.readDir ./sieves);
+    sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
     headOrNull = lst: if lst == [ ] then null else head lst;
     stripExt = ext: filename: headOrNull (match "(.+)[.]${ext}$" filename);
     compileFile = filename:
