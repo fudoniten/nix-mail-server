@@ -9,7 +9,7 @@ let
     sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
     headOrNull = lst: if lst == [ ] then null else head lst;
     stripExt = ext: filename: headOrNull (match "(.+)[.]${ext}$" filename);
-    compileFile = filename:
+    compileFile = filename: _:
       let
         filePath = ./sieves + "/${filename}";
         fileBaseName = stripExt "sieve" filename;
@@ -20,7 +20,7 @@ let
     phases = [ "installPhase" ];
     buildPhase = ''
       mkdir -p $out
-      ${concatStringsSep "\n" (map compileFile sieves)}
+      ${concatStringsSep "\n" (mapAttrsToList compileFile sieves)}
     '';
   };
 
