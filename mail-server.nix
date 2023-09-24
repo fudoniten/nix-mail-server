@@ -178,6 +178,7 @@ in {
         serices = let
           antivirusPort = 15407;
           antispamPort = 11335;
+          antispamControllerPort = 11336;
           lmtpPort = 24;
           authPort = 5447;
           userdbPort = 5448;
