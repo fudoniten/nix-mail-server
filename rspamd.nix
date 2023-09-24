@@ -75,7 +75,7 @@ in {
       workers = {
         rspamd_proxy = {
           type = "rspamd_proxy";
-          bindSockets = [ "localhost:${toString cfg.port}" ];
+          bindSockets = [ "localhost:${toString cfg.ports.milter}" ];
           count = 4;
           extraConfig = ''
             milter = yes;
@@ -91,7 +91,7 @@ in {
         controller = {
           type = "controller";
           count = 4;
-          bindSockets = [ "localhost:${toString cfg.controller-port}" ];
+          bindSockets = [ "localhost:${toString cfg.ports.controller}" ];
           includes = [ ];
         };
       };
