@@ -44,7 +44,7 @@ in {
         settings = {
           PhishingScanURLs = "no";
           DatabaseDirectory = mkForce cfg.state-directory;
-          User = "clavmav";
+          User = mkForce "clavmav";
           TCPSocket = cfg.port;
         };
       };
