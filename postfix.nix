@@ -7,6 +7,8 @@ in {
   options.fudo.mail.postfix = with types; {
     enable = mkEnableOption "Enable Postfix SMTP server.";
 
+    debug = mkEnableOption "Enable verbose logging.";
+
     domain = mkOption {
       type = str;
       description = "Primary domain served by this mail server.";
