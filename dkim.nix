@@ -25,7 +25,7 @@ let
 
   makeKeyTable = keyDir: domains:
     pkgs.writeText "opendkim-key-table" (concatStringsSep "\n"
-      (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key")));
+      (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key") domains));
 
   makeSigningTable = domains:
     pkgs.writeText "opendkim-signing-table"
