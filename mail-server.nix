@@ -11,6 +11,8 @@ in {
   options.fudo.mail = with types; {
     enable = mkEnableOption "Enable mail server.";
 
+    debug = mkEnableOption "Enable verbose logging.";
+
     state-directory = mkOption {
       type = str;
       description = "Directory at which to store server state.";
