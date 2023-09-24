@@ -66,7 +66,7 @@ in {
       enable = true;
       selector = cfg.selector;
       domains = let domainString = concatStringsSep "," cfg.domains;
-      in "csl:${domainsString}";
+      in "csl:${domainString}";
       configFile = let
         debugString = ''
           Syslog yes
