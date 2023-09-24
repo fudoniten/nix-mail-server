@@ -43,6 +43,12 @@ in {
         "List of domains to be considered local, and signed instead of verified.";
     };
 
+    selector = mkOption {
+      type = str;
+      description = "Name to use for mail-signing keys.";
+      default = "mail";
+    };
+
     port = mkOption {
       type = port;
       description = "Port at which to listen for incoming signing requests.";
