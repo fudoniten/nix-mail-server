@@ -370,10 +370,10 @@ in {
                 fudo.mail.dkim = {
                   enable = true;
                   debug = cfg.debug;
+                  port = dkimPort;
+                  state-directory = "/state";
                   domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
                 };
-                port = dkimPort;
-                state-directory = "/state";
               };
             };
           };
