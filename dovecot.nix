@@ -307,7 +307,7 @@ in {
 
           inet_listener dovecot-lmtp {
             address = 0.0.0.0
-            port = ${toString cfg.port.lmtp}
+            port = ${toString cfg.ports.lmtp}
           }
 
           # Drop privs, since all mail is owned by one user
