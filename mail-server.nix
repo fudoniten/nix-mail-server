@@ -314,7 +314,7 @@ in {
               # Needs access to external network for user lookups
               "external_network"
             ];
-            envFile = hostSecrets.mailLdapProxyEnv.target-file;
+            env_file = hostSecrets.mailLdapProxyEnv.target-file;
           };
           antispam = {
             service = {
