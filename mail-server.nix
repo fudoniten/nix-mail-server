@@ -188,16 +188,18 @@ in {
 
         in {
           smtp = {
-            networks = [
-              "internal_network"
-              # Needs access to internet to forward emails
-              "external_network"
-            ];
-            volumes = [
-              "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-              "${cfg.smtp.ssl-directory}:/run/certs/smtp"
-            ];
-            ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
+            service = {
+              networks = [
+                "internal_network"
+                # Needs access to internet to forward emails
+                "external_network"
+              ];
+              volumes = [
+                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${cfg.smtp.ssl-directory}:/run/certs/smtp"
+              ];
+              ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
+            };
             nixos = {
               useSystemd = true;
               configuration = [
@@ -250,14 +252,16 @@ in {
             };
           };
           imap = {
-            networks = [ "internal_network" ];
-            ports = [ "143:143" "993:993" ];
-            user = mkUserMap "mailserver-dovecot";
-            volumes = [
-              "${cfg.state-directory}/dovecot:/state"
-              "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-              "${cfg.imap.ssl-directory}:/run/certs/imap"
-            ];
+            service = {
+              networks = [ "internal_network" ];
+              ports = [ "143:143" "993:993" ];
+              user = mkUserMap "mailserver-dovecot";
+              volumes = [
+                "${cfg.state-directory}/dovecot:/state"
+                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${cfg.imap.ssl-directory}:/run/certs/imap"
+              ];
+            };
             nixos = {
               useSystemd = true;
               configuration = [
@@ -302,11 +306,13 @@ in {
             envFile = hostSecrets.mailLdapProxyEnv.target-file;
           };
           antispam = {
-            networks = [
-              "internal_network"
-              # Needs external access for blacklist checks
-              "external_network"
-            ];
+            service = {
+              networks = [
+                "internal_network"
+                # Needs external access for blacklist checks
+                "external_network"
+              ];
+            };
             nixos = {
               useSystemd = true;
               configuration = [
@@ -331,13 +337,15 @@ in {
             };
           };
           antivirus = {
-            networks = [
-              "internal_network"
-              # Needs external access for database updates
-              "external_network"
-            ];
-            user = mkUserMap "mailserver-antivirus";
-            volumes = [ "${cfg.state-directory}/antivirus:/state" ];
+            service = {
+              networks = [
+                "internal_network"
+                # Needs external access for database updates
+                "external_network"
+              ];
+              user = mkUserMap "mailserver-antivirus";
+              volumes = [ "${cfg.state-directory}/antivirus:/state" ];
+            };
             nixos = {
               useSystemd = true;
               configuration = [
@@ -355,9 +363,11 @@ in {
             };
           };
           dkim = {
-            networks = [ "internal_network" ];
-            user = mkUserMap "mailserver-dkim";
-            volumes = [ "${cfg.state-directory}/dkim:/state" ];
+            service = {
+              networks = [ "internal_network" ];
+              user = mkUserMap "mailserver-dkim";
+              volumes = [ "${cfg.state-directory}/dkim:/state" ];
+            };
             nixos = {
               useSystemd = true;
               configuration = [
@@ -377,8 +387,10 @@ in {
             };
           };
           metrics-proxy = {
-            networks = [ "internal_network" ];
-            ports = [ "${toString cfg.metricsPort}:80" ];
+            service = {
+              networks = [ "internal_network" ];
+              ports = [ "${toString cfg.metricsPort}:80" ];
+            };
             nixos = {
               useSystemd = true;
               configuration = {
