@@ -153,10 +153,10 @@ in {
           auto = "create";
           specialUse = "Sent";
         };
-        Archive = {
-          auto = "no";
-          specialUse = "Archive";
-        };
+        # Archive = {
+        #   auto = "no";
+        #   specialUse = "Archive";
+        # };
         Flagged = {
           auto = "subscribe";
           specialUse = "Flagged";
