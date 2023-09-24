@@ -306,7 +306,7 @@ in {
               };
             };
           };
-          ldap-proxy.service = mkIf (cfg.ldap-proxy != null) {
+          ldap-proxy.service = {
             image = cfg.images.ldap-proxy;
             restart = "always";
             networks = [
