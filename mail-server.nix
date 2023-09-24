@@ -184,7 +184,7 @@ in {
           userdbPort = 5448;
           mkUserMap = username:
             let uid = config.users.users."${username}".uid;
-            in "${uid}:${uid}";
+            in "${toString uid}:${toString uid}";
 
         in {
           smtp = {
