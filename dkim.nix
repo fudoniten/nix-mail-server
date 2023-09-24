@@ -20,8 +20,8 @@ let
       fi
     '';
 
-  ensureAllDkimCerts = keyDir:
-    domains concatStringsSep "\n" (map (ensureDomainDkimCert keyDir) domains);
+  ensureAllDkimCerts = keyDir: domains:
+    concatStringsSep "\n" (map (ensureDomainDkimCert keyDir) domains);
 
   makeKeyTable = keyDir: domains:
     pkgs.writeText "opendkim-key-table" (concatStringsSep "\n"
@@ -73,6 +73,8 @@ in {
           SyslogSuccess yes
           LogWhy yes
         '';
+        keyTable = makeKeyTable cfg.state-directory cfg.domains;
+        signingTable = makeSigningTable cfg.domains;
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
         Socket inet:${toString cfg.port}
@@ -88,7 +90,11 @@ in {
         group = config.services.opendkim.group;
       in [ "d ${cfg.state-directory} 0700 ${user} ${group} - -" ];
       services.opendkim = {
-        serviceConfig.ReadWritePaths = [ cfg.state-directory ];
+        serviceConfig = {
+          ExecStartPre = pkgs.writeShellScript "ensure-dkim-certs.sh"
+            (ensureAllDkimCerts cfg.state-directory cfg.domains);
+          ReadWritePaths = [ cfg.state-directory ];
+        };
       };
     };
   };
