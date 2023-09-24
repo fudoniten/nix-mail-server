@@ -202,53 +202,51 @@ in {
             };
             nixos = {
               useSystemd = true;
-              configuration = [
-                (import ./postfix.nix)
-                (import ./dovecot.nix)
-                {
-                  boot.tmpOnTmpfs = true;
-                  system.nssModules = lib.mkForce [ ];
+              configuration = {
+                imports = [ ./dovecot.nix ./postfix.nix ];
 
-                  fudo.mail.postfix = {
-                    enable = true;
-                    debug = cfg.debug;
-                    domain = cfg.primary-domain;
-                    local-domains = cfg.extra-domains;
-                    hostname = cfg.smtp.hostname;
-                    trusted-networks = cfg.trusted-networks;
-                    blacklist = {
-                      senders = cfg.blacklist.senders;
-                      recipients = cfg.blacklist.recipients;
-                      dns = cfg.blacklist.dns;
-                    };
-                    aliases = {
-                      user-aliases = cfg.user-aliases;
-                      alias-users = cfg.alias-users;
-                    };
-                    ssl = {
-                      certificate =
-                        "/run/certs/smtp/fullchain.pem"; # FIXME: or just cert?
-                      private-key = "/run/certs/smtp/key.pem";
-                    };
-                    sasl-domain = cfg.sasl-domain;
-                    message-size-limit = cfg.message-size-limit;
-                    ports = { metrics = metricsPort; };
-                    rspamd-server = {
-                      host = "antispam";
-                      port = antispamPort;
-                    };
-                    lmtp-server = {
-                      host = "imap";
-                      port = lmtpPort;
-                    };
-                    dkim-server = {
-                      host = "dkim";
-                      port = dkimPort;
-                    };
-                    ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+                boot.tmpOnTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+
+                fudo.mail.postfix = {
+                  enable = true;
+                  debug = cfg.debug;
+                  domain = cfg.primary-domain;
+                  local-domains = cfg.extra-domains;
+                  hostname = cfg.smtp.hostname;
+                  trusted-networks = cfg.trusted-networks;
+                  blacklist = {
+                    senders = cfg.blacklist.senders;
+                    recipients = cfg.blacklist.recipients;
+                    dns = cfg.blacklist.dns;
                   };
-                }
-              ];
+                  aliases = {
+                    user-aliases = cfg.user-aliases;
+                    alias-users = cfg.alias-users;
+                  };
+                  ssl = {
+                    certificate =
+                      "/run/certs/smtp/fullchain.pem"; # FIXME: or just cert?
+                    private-key = "/run/certs/smtp/key.pem";
+                  };
+                  sasl-domain = cfg.sasl-domain;
+                  message-size-limit = cfg.message-size-limit;
+                  ports = { metrics = metricsPort; };
+                  rspamd-server = {
+                    host = "antispam";
+                    port = antispamPort;
+                  };
+                  lmtp-server = {
+                    host = "imap";
+                    port = lmtpPort;
+                  };
+                  dkim-server = {
+                    host = "dkim";
+                    port = dkimPort;
+                  };
+                  ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+                };
+              };
             };
           };
           imap = {
@@ -264,35 +262,33 @@ in {
             };
             nixos = {
               useSystemd = true;
-              configuration = [
-                (import ./dovecot.nix)
-                {
-                  boot.tmpOnTmpfs = true;
-                  system.nssModules = lib.mkForce [ ];
-                  fudo.mail.dovecot = {
-                    enable = true;
-                    debug = cfg.debug;
-                    state-directory = "/state";
-                    ports = {
-                      lmtp = lmtpPort;
-                      auth = authPort;
-                      userdb = userdbPort;
-                      metrics = metricsPort;
-                    };
-                    mail-user = cfg.mail-user;
-                    mail-group = cfg.mail-group;
-                    ssl = {
-                      certificate = "/run/certs/imap/fullchain.pem";
-                      private-key = "/run/certs/imap/key.pem";
-                    };
-                    rspamd = {
-                      host = "antispam";
-                      port = antispamPort;
-                    };
-                    ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+              configuration = {
+                imports = [ ./dovecot.nix ];
+                boot.tmpOnTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                fudo.mail.dovecot = {
+                  enable = true;
+                  debug = cfg.debug;
+                  state-directory = "/state";
+                  ports = {
+                    lmtp = lmtpPort;
+                    auth = authPort;
+                    userdb = userdbPort;
+                    metrics = metricsPort;
                   };
-                }
-              ];
+                  mail-user = cfg.mail-user;
+                  mail-group = cfg.mail-group;
+                  ssl = {
+                    certificate = "/run/certs/imap/fullchain.pem";
+                    private-key = "/run/certs/imap/key.pem";
+                  };
+                  rspamd = {
+                    host = "antispam";
+                    port = antispamPort;
+                  };
+                  ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+                };
+              };
             };
           };
           ldap-proxy.service = mkIf (cfg.ldap-proxy != null) {
@@ -315,25 +311,23 @@ in {
             };
             nixos = {
               useSystemd = true;
-              configuration = [
-                (import ./rspamd.nix)
-                {
-                  boot.tmpOnTmpfs = true;
-                  system.nssModules = lib.mkForce [ ];
-                  fudo.mail.rspamd = {
-                    enable = true;
-                    ports = {
-                      milter = antispamPort;
-                      controller = antispamControllerPort;
-                      metrics = metricsPort;
-                    };
-                    antivirus = {
-                      host = "antivirus";
-                      port = antivirusPort;
-                    };
+              configuration = {
+                imports = [ ./rspamd.nix ];
+                boot.tmpOnTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                fudo.mail.rspamd = {
+                  enable = true;
+                  ports = {
+                    milter = antispamPort;
+                    controller = antispamControllerPort;
+                    metrics = metricsPort;
                   };
-                }
-              ];
+                  antivirus = {
+                    host = "antivirus";
+                    port = antivirusPort;
+                  };
+                };
+              };
             };
           };
           antivirus = {
@@ -348,18 +342,16 @@ in {
             };
             nixos = {
               useSystemd = true;
-              configuration = [
-                (import ./clamav.nix)
-                {
-                  boot.tmpOnTmpfs = true;
-                  system.nssModules = lib.mkForce [ ];
-                  fudo.mail.clamav = {
-                    enable = true;
-                    state-directory = "/state";
-                    port = antispamPort;
-                  };
-                }
-              ];
+              configuration = {
+                imports = [ ./clamav.nix ];
+                boot.tmpOnTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                fudo.mail.clamav = {
+                  enable = true;
+                  state-directory = "/state";
+                  port = antispamPort;
+                };
+              };
             };
           };
           dkim = {
@@ -370,20 +362,18 @@ in {
             };
             nixos = {
               useSystemd = true;
-              configuration = [
-                (import ./dkim.nix)
-                {
-                  boot.tmpOnTmpfs = true;
-                  system.nssModules = lib.mkForce [ ];
-                  fudo.mail.dkim = {
-                    enable = true;
-                    debug = cfg.debug;
-                    domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
-                  };
-                  port = dkimPort;
-                  state-directory = "/state";
-                }
-              ];
+              configuration = {
+                imports = [ ./dkim.nix ];
+                boot.tmpOnTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                fudo.mail.dkim = {
+                  enable = true;
+                  debug = cfg.debug;
+                  domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
+                };
+                port = dkimPort;
+                state-directory = "/state";
+              };
             };
           };
           metrics-proxy = {
