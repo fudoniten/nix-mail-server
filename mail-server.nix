@@ -182,6 +182,7 @@ in {
           lmtpPort = 24;
           authPort = 5447;
           userdbPort = 5448;
+          dkimPort = 5734;
           mkUserMap = username:
             let uid = config.users.users."${username}".uid;
             in "${toString uid}:${toString uid}";
