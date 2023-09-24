@@ -1,7 +1,10 @@
 { config, lib, pkgs, ... }:
 
 with lib;
-let allDomains = [ cfg.domain ] ++ cfg.local-domains;
+let
+  cfg = config.fudo.mail.postfix;
+
+  allDomains = [ cfg.domain ] ++ cfg.local-domains;
 
 in {
   options.fudo.mail.postfix = with types; {
