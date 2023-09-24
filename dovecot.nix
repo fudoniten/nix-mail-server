@@ -2,6 +2,8 @@
 
 with lib;
 let
+  cfg = config.fudo.mail.dovecot;
+
   sievePath = let
     isRegularFile = _: type: type == "regular";
     sieves = filter isRegularFile (builtins.readDir ./sieves);

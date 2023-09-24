@@ -63,11 +63,11 @@ in {
           }
         '';
 
-        "rbl.conf".text = ''
-          rbls {
-            an_rbl
-          }
-        '';
+        # "rbl.conf".text = ''
+        #   rbls {
+        #     an_rbl
+        #   }
+        # '';
       };
 
       overrides."milter_headers.conf".text = "extended_spam_headers = true;";
