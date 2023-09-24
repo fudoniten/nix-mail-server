@@ -6,6 +6,8 @@ let
 
   allDomains = [ cfg.domain ] ++ cfg.local-domains;
 
+  concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
+
 in {
   options.fudo.mail.postfix = with types; {
     enable = mkEnableOption "Enable Postfix SMTP server.";
@@ -238,8 +240,6 @@ in {
         useSrs = true;
 
         dnsBlacklists = cfg.dns-blacklists;
-
-        concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
 
         mapFiles = let
           writeEntries = filename: entries:
