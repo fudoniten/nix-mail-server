@@ -24,6 +24,8 @@ let
     '';
   };
 
+  sieveDirectory = "${cfg.state-directory}/sieves";
+
 in {
   options.fudo.mail.dovecot = with types; {
     enable = mkEnableOption "Enable Dovecot2 IMAP server.";
@@ -336,7 +338,7 @@ in {
           plugin {
             sieve_plugins = sieve_imapsieve sieve_extprograms
             sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
-            sieve_default = file:${cfg.sieve-directory}/%u/default.sieve
+            sieve_default = file:${sieveDirectory}/%u/default.sieve
             sieve_default_name = default
             # From elsewhere to Spam folder
             imapsieve_mailbox1_name = Junk
