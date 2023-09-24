@@ -228,7 +228,6 @@ in {
       enable = true;
       enableImap = true;
       enableLmtp = true;
-      enablePAM = cfg.ldap == null;
 
       mailUser = cfg.mail-user;
       mailGroup = cfg.mail-group;
