@@ -39,19 +39,21 @@ in {
       [ "d ${cfg.state-directory} 0750 clamav clamav - -" ];
 
     services.clamav = {
-      enable = true;
-      settings = {
-        PhishingScanURLs = "no";
-        DatabaseDirectory = mkForce cfg.state-directory;
-        User = "clavmav";
-        TCPSocket = cfg.port;
+      daemon = {
+        enable = true;
+        settings = {
+          PhishingScanURLs = "no";
+          DatabaseDirectory = mkForce cfg.state-directory;
+          User = "clavmav";
+          TCPSocket = cfg.port;
+        };
       };
-    };
-    updater = {
-      enable = true;
-      settings = {
-        DatabaseDirectory = mkForce cfg.state-directory;
-        DatabaseOwner = "clamav";
+      updater = {
+        enable = true;
+        settings = {
+          DatabaseDirectory = mkForce cfg.state-directory;
+          DatabaseOwner = "clamav";
+        };
       };
     };
   };
