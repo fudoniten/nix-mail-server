@@ -219,7 +219,7 @@ in {
         scopes = [ "user" "global" ];
         user = cfg.metrics.user;
         listenAddress = "127.0.0.1";
-        port = cfg.metrics.port;
+        port = cfg.ports.metrics;
         socketPath = "/var/run/dovecot2/old-stats";
       };
 
