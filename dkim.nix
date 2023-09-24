@@ -49,6 +49,19 @@ in {
       default = "mail";
     };
 
+    key-bits = mkOption {
+      type = int;
+      description = ''
+        How many bits in generated DKIM keys. RFC6376 advises minimum 1024-bit keys.
+
+        If you have already deployed a key with a different number of bits than specified
+        here, then you should use a different selector (dkimSelector). In order to get
+        this package to generate a key with the new number of bits, you will either have to
+        change the selector or delete the old key file.
+      '';
+      default = 2048;
+    };
+
     port = mkOption {
       type = port;
       description = "Port at which to listen for incoming signing requests.";
