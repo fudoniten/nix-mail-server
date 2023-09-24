@@ -323,6 +323,7 @@ in {
                 # Needs external access for blacklist checks
                 "external_network"
               ];
+              capabilities.SYS_ADMIN = true;
             };
             nixos = {
               useSystemd = true;
@@ -354,7 +355,6 @@ in {
               ];
               user = mkUserMap "mailserver-antivirus";
               volumes = [ "${cfg.state-directory}/antivirus:/state" ];
-              capabilities.SYS_ADMIN = true;
             };
             nixos = {
               useSystemd = true;
