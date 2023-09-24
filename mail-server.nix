@@ -18,6 +18,18 @@ in {
       description = "Directory at which to store server state.";
     };
 
+    mail-user = mkOption {
+      type = str;
+      description = "User as which to store mail.";
+      default = "fudo-mail";
+    };
+
+    mail-group = mkOption {
+      type = str;
+      description = "Group as which to store mail.";
+      default = "fudo-mail";
+    };
+
     primary-domain = mkOption {
       type = str;
       description = "Primary domain name served by this server.";
