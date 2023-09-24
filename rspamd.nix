@@ -43,7 +43,7 @@ in {
     services.prometheus.exporters.rspamd = {
       enable = true;
       listenAddress = "127.0.0.1";
-      port = cfg.metrics-port;
+      port = cfg.ports.metrics;
     };
 
     services.rspamd = {
