@@ -75,6 +75,12 @@ in {
         description = "Organizational unit containing users.";
         default = "ou=members";
       };
+
+      metricsPort = mkOption {
+        type = port;
+        description = "Port on which to serve metrics.";
+        default = 5457;
+      };
     };
 
     images.ldap-proxy = mkOption {
