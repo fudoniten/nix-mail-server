@@ -260,7 +260,7 @@ in {
                 name = "rspamd_${msg}";
                 runtimeInputs = with pkgs; [ rspamd ];
                 text =
-                  "exec rspamc -h ${cfg.rspamd.host}:${cfg.rspam.port} ${msg}";
+                  "exec rspamc -h ${cfg.rspamd.host}:${cfg.rspamd.port} ${msg}";
               };
             learnHam = teachRspamd "learn_ham";
             learnSpam = teachRspamd "learn_spam";
