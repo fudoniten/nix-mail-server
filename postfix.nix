@@ -289,7 +289,7 @@ in {
           mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
           sender-restrictions = [
-            "check_sender_access ${mapped-file "reject_senders"}"
+            "check_sender_access ${mappedFile "reject_senders"}"
             "reject_sender_login_mismatch"
             "reject_non_fqdn_sender"
             "reject_unknown_sender_domain"
@@ -309,7 +309,7 @@ in {
             cfg.blacklist.dns) ++ [ "reject" ];
 
           recipient-restrictions = [
-            "check_sender_access ${mapped-file "reject_recipients"}"
+            "check_sender_access ${mappedFile "reject_recipients"}"
             "reject_unknown_sender_domain"
             "reject_unknown_recipient_domain"
             "reject_unauth_pipelining"
