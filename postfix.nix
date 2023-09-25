@@ -182,7 +182,7 @@ in {
         showqPath = "/var/lib/postfix/queue/public/showq";
         group = config.services.postfix.group;
         listenAddress = "127.0.0.1";
-        port = cfg.metrics-port;
+        port = cfg.ports.metrics;
       };
 
       dovecot2 = {
