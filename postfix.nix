@@ -200,7 +200,7 @@ in {
 
           passdb {
             driver = ldap
-            args = ${ldapConfig}
+            args = ${ldap-conf}
           }
 
           userdb = {
