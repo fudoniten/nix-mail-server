@@ -379,13 +379,13 @@ in {
             "i {mail_addr} {client_addr} {client_name} {auth_type} {auth_authen} {auth_author} {mail_addr} {mail_host} {mail_mailer}";
 
           smtpd_milters = [
-            "inet:${cfg.rspamd-server.host}:${cfg.rspamd-server.port}"
-            "inet:${cfg.dkim.host}:${cfg.dkim.port}"
+            "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
+            "inet:${cfg.dkim.host}:${toString cfg.dkim.port}"
           ];
 
           non_smtpd_milters = [
-            "inet:${cfg.rspamd-server.host}:${cfg.rspamd-server.port}"
-            "inet:${cfg.dkim.host}:${cfg.dkim.port}"
+            "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
+            "inet:${cfg.dkim.host}:${toString cfg.dkim.port}"
           ];
 
           helo_required = true;
