@@ -458,7 +458,7 @@ in {
           # See: http://www.postfix.org/smtp.8.html
           lmtp.args = [ "flags=DO" ];
           policy-spf = let
-            policySpfFile = pkgs.writeText "policyd-spf.conf"
+            policydSpfFile = pkgs.writeText "policyd-spf.conf"
               (cfg.postfix.policy-spf.extraConfig
                 + (lib.optionalString cfg.debug "debugLevel = 4"));
           in {
@@ -469,7 +469,7 @@ in {
             args = [
               "user=nobody"
               "argv=${pkgs.pypolicyd-spf}/bin/policyd-spf"
-              "${policydSpf}"
+              "${policydSpfFile}"
             ];
           };
           submission-header-cleanup = let
