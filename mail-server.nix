@@ -41,6 +41,22 @@ in {
       default = [ ];
     };
 
+    aliases = {
+      user-aliases = mkOption {
+        type = attrsOf (listOf str);
+        description =
+          "Map of username to list of aliases mapping to that user.";
+        default = { };
+      };
+
+      alias-users = mkOption {
+        type = attrsOf (listOf str);
+        description =
+          "Map of alias user to list of users who should receive email..";
+        default = { };
+      };
+    };
+
     metrics-port = mkOption {
       type = port;
       description = "Port on which to serve metrics.";
@@ -248,8 +264,8 @@ in {
                     dns = cfg.blacklist.dns;
                   };
                   aliases = {
-                    user-aliases = cfg.user-aliases;
-                    alias-users = cfg.alias-users;
+                    user-aliases = cfg.aliases.user-aliases;
+                    alias-users = cfg.aliases.alias-users;
                   };
                   ssl = {
                     certificate =
