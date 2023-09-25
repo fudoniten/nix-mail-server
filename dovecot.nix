@@ -19,7 +19,7 @@ let
     name = "dovecot-sieves";
     buildInputs = with pkgs; [ dovecot_pigeonhole ];
     phases = [ "installPhase" ];
-    buildPhase = ''
+    installPhase = ''
       mkdir -p $out
       ${concatStringsSep "\n" (mapAttrsToList compileFile sieves)}
     '';
