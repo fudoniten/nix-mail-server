@@ -344,8 +344,9 @@ in {
           # virtual_gid_maps = let gid = config.users.groups."${cfg.group}".gid;
           # in "static: ${toString gid}";
 
-          virtual_transport =
-            "lmtp:inet:${cfg.lmtp-server.host}:${cfg.lmtp-server.port}";
+          virtual_transport = "lmtp:inet:${cfg.lmtp-server.host}:${
+              toString cfg.lmtp-server.port
+            }";
 
           message_size_limit = toString (cfg.message-size-limit * 1024 * 1024);
 
