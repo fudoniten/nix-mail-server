@@ -235,7 +235,9 @@ in {
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
-        sender-restrictions = [
+        makeRestrictionsList = concatStringsSep "\n";
+
+        sender-restrictions = makeRestrictionsList ([
           "check_sender_access ${mappedFile "reject_senders"}"
           "reject_sender_login_mismatch"
           "reject_non_fqdn_sender"
@@ -243,9 +245,9 @@ in {
           "permit_mynetworks"
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ];
+          cfg.blacklist.dns) ++ [ "reject" ]);
 
-        relay-restrictions = [
+        relay-restrictions = makeRestrictionsList ([
           "reject_unauth_destination"
           "reject_unauth_pipelining"
           "reject_unauth_destination"
@@ -253,9 +255,9 @@ in {
           "permit_mynetworks"
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ];
+          cfg.blacklist.dns) ++ [ "reject" ]);
 
-        recipient-restrictions = [
+        recipient-restrictions = makeRestrictionsList ([
           "check_sender_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
@@ -268,18 +270,21 @@ in {
           "check_policy_service unix:private/policy-spf"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns)
-          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
+          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ]);
 
-        client-restrictions =
-          [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
+        client-restrictions = makeRestrictionsList [
+          "permit_sasl_authenticated"
+          "permit_mynetworks"
+          "reject"
+        ];
 
-        helo-restrictions = [
+        helo-restrictions = makeRestrictionsList ([
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
           "reject_unknown_helo_hostname"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit" ];
+          cfg.blacklist.dns) ++ [ "permit" ]);
 
       in {
         enable = true;
