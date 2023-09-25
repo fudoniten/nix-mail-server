@@ -308,7 +308,7 @@ in {
           writeEntries = filename: entries:
             pkgs.writeText filename (concatStringsSep "\n" entries);
           mkRejectList = entries: map (entry: "${entry} REJECT") entries;
-          escapeDot = replaceString [ "." ] [ "\\." ];
+          escapeDot = replaceStrings [ "." ] [ "\\." ];
         in {
           reject_senders = writeEntries "sender_blacklist"
             (mkRejectList cfg.blacklist.senders);
