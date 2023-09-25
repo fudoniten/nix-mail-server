@@ -199,7 +199,10 @@ in {
           let
             filePath = ./sieves + "/${filename}";
             fileBaseName = stripExt "sieve" filename;
-          in "sievec ${filePath} ${sieveDirectory}/${fileBaseName}.svbin";
+          in ''
+            sievec ${filePath} ${sieveDirectory}/${fileBaseName}.svbin
+            cp ${filePath} ${sieveDirectory}/${fileBaseName}.sieve
+          '';
       in {
         wantedBy = [ "dovecot2.service" ];
         before = [ "dovecot2.service" ];
@@ -359,12 +362,12 @@ in {
             # From elsewhere to Spam folder
             imapsieve_mailbox1_name = Junk
             imapsieve_mailbox1_causes = COPY
-            imapsieve_mailbox1_before = file:${sievePath}/report-spam.sieve
+            imapsieve_mailbox1_before = file:${sieveDirectory}/spam.svbin
             # From Spam folder to elsewhere
             imapsieve_mailbox2_name = *
             imapsieve_mailbox2_from = Junk
             imapsieve_mailbox2_causes = COPY
-            imapsieve_mailbox2_before = file:${sievePath}/report-ham.sieve
+            imapsieve_mailbox2_before = file:${sieveDirectory}/ham.svbin
 
             sieve_pipe_bin_dir = ${pipeBin}/bin
             sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
