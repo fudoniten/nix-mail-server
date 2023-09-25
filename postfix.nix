@@ -93,7 +93,7 @@ in {
       description = "SASL domain to use for authentication.";
     };
 
-    policy-spf.extraConfig = mkOption {
+    policy-spf.extra-config = mkOption {
       type = str;
       default = "";
       example = "skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1";
@@ -458,8 +458,8 @@ in {
           # See: http://www.postfix.org/smtp.8.html
           lmtp.args = [ "flags=DO" ];
           policy-spf = let
-            policydSpfFile = pkgs.writeText "policyd-spf.conf"
-              (cfg.postfix.policy-spf.extraConfig
+            policydSpfConfig = concatStringsSep "\n"
+              (cfg.policy-spf.extra-config
                 + (lib.optionalString cfg.debug "debugLevel = 4"));
           in {
             type = "unix";
@@ -469,7 +469,7 @@ in {
             args = [
               "user=nobody"
               "argv=${pkgs.pypolicyd-spf}/bin/policyd-spf"
-              "${policydSpfFile}"
+              "${policydSpfConfig}"
             ];
           };
           submission-header-cleanup = let
