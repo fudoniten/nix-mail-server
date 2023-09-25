@@ -4,27 +4,6 @@ with lib;
 let
   cfg = config.fudo.mail.dovecot;
 
-  sievePath = let
-    isRegularFile = _: type: type == "regular";
-    sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
-    headOrNull = lst: if lst == [ ] then null else head lst;
-    stripExt = ext: filename:
-      headOrNull (builtins.match "(.+)[.]${ext}$" filename);
-    compileFile = filename: _:
-      let
-        filePath = ./sieves + "/${filename}";
-        fileBaseName = stripExt "sieve" filename;
-      in "sievec ${filePath} $out/${fileBaseName}.svbin";
-  in pkgs.stdenv.mkDerivation {
-    name = "dovecot-sieves";
-    buildInputs = with pkgs; [ dovecot dovecot_pigeonhole ];
-    phases = [ "installPhase" ];
-    installPhase = ''
-      mkdir -p $out
-      ${concatStringsSep "\n" (mapAttrsToList compileFile sieves)}
-    '';
-  };
-
   sieveDirectory = "${cfg.state-directory}/sieves";
 
 in {
@@ -209,6 +188,41 @@ in {
         "d ${cfg.state-directory}/mail 0750 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/sieves 0750 ${cfg.mail-user} ${cfg.mail-group} - -"
       ];
+
+      services.dovecot-sieve-generator = let
+        isRegularFile = _: type: type == "regular";
+        sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
+        headOrNull = lst: if lst == [ ] then null else head lst;
+        stripExt = ext: filename:
+          headOrNull (builtins.match "(.+)[.]${ext}$" filename);
+        compileFile = filename: _:
+          let
+            filePath = ./sieves + "/${filename}";
+            fileBaseName = stripExt "sieve" filename;
+          in "sievec ${filePath} ${sieveDirectory}/${fileBaseName}.svbin";
+      in {
+        wantedBy = [ "dovecot2.service" ];
+        before = [ "dovecot2.service" ];
+        serviceConfig = {
+          User = config.services.dovecot2.user;
+          ReadWritePaths = [ sieveDirectory ];
+          ExecStart = pkgs.writeShellScript "generate-sieves.sh"
+            (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
+          PrivateNetwork = true;
+          PrivateDevices = true;
+          PrivateTmp = true;
+          PrivateMounts = true;
+          ProtectControlGroups = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectSystem = true;
+          ProtectHostname = true;
+          ProtectHome = true;
+          ProtectClock = true;
+          ProtectKernelLogs = true;
+          Type = "oneshot";
+        };
+      };
     };
 
     services = {
