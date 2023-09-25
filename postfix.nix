@@ -231,7 +231,57 @@ in {
       #   # TODO: secret
       # };
 
-      postfix = {
+      postfix = let
+        pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
+        mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
+
+        sender-restrictions = [
+          "check_sender_access ${mappedFile "reject_senders"}"
+          "reject_sender_login_mismatch"
+          "reject_non_fqdn_sender"
+          "reject_unknown_sender_domain"
+          "permit_mynetworks"
+          "permit_sasl_authenticated"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns) ++ [ "reject" ];
+
+        relay-restrictions = [
+          "reject_unauth_destination"
+          "reject_unauth_pipelining"
+          "reject_unauth_destination"
+          "reject_unknown_sender_domain"
+          "permit_mynetworks"
+          "permit_sasl_authenticated"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns) ++ [ "reject" ];
+
+        recipient-restrictions = [
+          "check_sender_access ${mappedFile "reject_recipients"}"
+          "reject_unknown_sender_domain"
+          "reject_unknown_recipient_domain"
+          "reject_unauth_pipelining"
+          "reject_unauth_destination"
+          "reject_invalid_hostname"
+          "reject_non_fqdn_hostname"
+          "reject_non_fqdn_sender"
+          "reject_non_fqdn_recipient"
+          "check_policy_service unix:private/policy-spf"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns)
+          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
+
+        client-restrictions =
+          [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
+
+        helo-restrictions = [
+          "permit_mynetworks"
+          "reject_invalid_hostname"
+          "reject_non_fqdn_helo_hostname"
+          "reject_unknown_helo_hostname"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns) ++ [ "permit" ];
+
+      in {
         enable = true;
 
         user = cfg.user;
@@ -284,57 +334,7 @@ in {
         sslCert = cfg.ssl.certificate;
         sslKey = cfg.ssl.private-key;
 
-        config = let
-          pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
-          mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
-
-          sender-restrictions = [
-            "check_sender_access ${mappedFile "reject_senders"}"
-            "reject_sender_login_mismatch"
-            "reject_non_fqdn_sender"
-            "reject_unknown_sender_domain"
-            "permit_mynetworks"
-            "permit_sasl_authenticated"
-          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns) ++ [ "reject" ];
-
-          relay-restrictions = [
-            "reject_unauth_destination"
-            "reject_unauth_pipelining"
-            "reject_unauth_destination"
-            "reject_unknown_sender_domain"
-            "permit_mynetworks"
-            "permit_sasl_authenticated"
-          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns) ++ [ "reject" ];
-
-          recipient-restrictions = [
-            "check_sender_access ${mappedFile "reject_recipients"}"
-            "reject_unknown_sender_domain"
-            "reject_unknown_recipient_domain"
-            "reject_unauth_pipelining"
-            "reject_unauth_destination"
-            "reject_invalid_hostname"
-            "reject_non_fqdn_hostname"
-            "reject_non_fqdn_sender"
-            "reject_non_fqdn_recipient"
-            "check_policy_service unix:private/policy-spf"
-          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns)
-            ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
-
-          client-restrictions =
-            [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
-
-          helo-restrictions = [
-            "permit_mynetworks"
-            "reject_invalid_hostname"
-            "reject_non_fqdn_helo_hostname"
-            "reject_unknown_helo_hostname"
-          ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns) ++ [ "permit" ];
-
-        in {
+        config = {
           virtual_mailbox_domains = allDomains;
           virtual_mailbox_maps = mappedFile "virtual_mailbox_map";
 
