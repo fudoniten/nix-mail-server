@@ -17,7 +17,7 @@ let
       in "sievec ${filePath} $out/${fileBaseName}.svbin";
   in pkgs.stdenv.mkDerivation {
     name = "dovecot-sieves";
-    buildInputs = with pkgs; [ dovecot_pigeonhole ];
+    buildInputs = with pkgs; [ dovecot dovecot_pigeonhole ];
     phases = [ "installPhase" ];
     installPhase = ''
       mkdir -p $out
