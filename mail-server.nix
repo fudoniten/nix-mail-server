@@ -47,6 +47,11 @@ in {
       default = 100;
     };
 
+    sasl-domain = mkOption {
+      type = str;
+      description = "SASL domain to use for authentication.";
+    };
+
     blacklist = {
       senders = mkOption {
         type = listOf str;
