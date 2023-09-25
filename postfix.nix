@@ -223,6 +223,14 @@ in {
         '';
       };
 
+      # pfix-srsd = let
+
+      # in {
+      #   enable = true;
+      #   domain = cfg.primary-domain;
+      #   # TODO: secret
+      # };
+
       postfix = {
         enable = true;
 
@@ -237,7 +245,7 @@ in {
         enableHeaderChecks = true;
         enableSmtp = true;
         enableSubmission = true;
-        useSrs = true;
+        # useSrs = true;
 
         dnsBlacklists = cfg.dns-blacklists;
 
