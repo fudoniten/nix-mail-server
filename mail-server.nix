@@ -275,6 +275,7 @@ in {
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
+              depends_on = [ "imap" "ldap-proxy" ];
             };
             nixos = {
               useSystemd = true;
@@ -335,6 +336,7 @@ in {
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap"
               ];
+              depends_on = [ "antispam" "ldap-proxy" ];
             };
             nixos = {
               useSystemd = true;
@@ -385,6 +387,7 @@ in {
                 "external_network"
               ];
               capabilities.SYS_ADMIN = true;
+              depends_on = [ "antivirus" ];
             };
             nixos = {
               useSystemd = true;
@@ -457,6 +460,7 @@ in {
             service = {
               networks = [ "internal_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
+              depends_on = [ "postfix" "dovecot" "antispam" ];
             };
             nixos = {
               useSystemd = true;
@@ -477,7 +481,7 @@ in {
                       "/dovecot" = {
                         proxyPass = "http://imap:${toString metricsPort}/";
                       };
-                      "rspamd" = {
+                      "/rspamd" = {
                         proxyPass = "http://antispam:${toString metricsPort}/";
                       };
                     };
