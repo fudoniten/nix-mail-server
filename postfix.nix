@@ -247,7 +247,7 @@ in {
         enableSubmission = true;
         # useSrs = true;
 
-        dnsBlacklists = cfg.blacklist.dns;
+        # dnsBlacklists = cfg.blacklist.dns;
 
         mapFiles = let
           writeEntries = filename: entries:

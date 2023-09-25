@@ -41,6 +41,28 @@ in {
       default = [ ];
     };
 
+    blacklist = {
+      senders = mkOption {
+        type = listOf str;
+        description =
+          "List of email addresses for which we will never send email.";
+        default = [ ];
+      };
+
+      recipients = mkOption {
+        type = listOf str;
+        description =
+          "List of email addresses for which we will not accept email.";
+        default = [ ];
+      };
+
+      dns = mkOption {
+        type = listOf str;
+        description = "List of DNS spam blacklists to use.";
+        default = [ ];
+      };
+    };
+
     aliases = {
       user-aliases = mkOption {
         type = attrsOf (listOf str);
