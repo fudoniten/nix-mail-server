@@ -459,8 +459,8 @@ in {
           lmtp.args = [ "flags=DO" ];
           policy-spf = let
             policydSpfConfig = concatStringsSep "\n"
-              (cfg.policy-spf.extra-config
-                + (lib.optionalString cfg.debug "debugLevel = 4"));
+              ([ cfg.policy-spf.extra-config ]
+                ++ (lib.optional cfg.debug "debugLevel = 4"));
           in {
             type = "unix";
             privileged = true;
