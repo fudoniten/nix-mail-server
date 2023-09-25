@@ -460,7 +460,7 @@ in {
             service = {
               networks = [ "internal_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
-              depends_on = [ "postfix" "dovecot" "antispam" ];
+              depends_on = [ "smtp" "imap" "antispam" ];
             };
             nixos = {
               useSystemd = true;
