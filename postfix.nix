@@ -200,12 +200,12 @@ in {
 
           passdb {
             driver = ldap
-            args = ${ldap-conf}
+            args = ${cfg.ldap-conf}
           }
 
           userdb = {
             driver = ldap
-            args = ${ldap-conf}
+            args = ${cfg.ldap-conf}
           }
 
           service auth {
