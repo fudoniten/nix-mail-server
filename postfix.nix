@@ -380,12 +380,12 @@ in {
 
           smtpd_milters = [
             "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
-            "inet:${cfg.dkim.host}:${toString cfg.dkim.port}"
+            "inet:${cfg.dkim-server.host}:${toString cfg.dkim-server.port}"
           ];
 
           non_smtpd_milters = [
             "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
-            "inet:${cfg.dkim.host}:${toString cfg.dkim.port}"
+            "inet:${cfg.dkim-server.host}:${toString cfg.dkim-server.port}"
           ];
 
           helo_required = true;
