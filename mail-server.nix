@@ -41,6 +41,12 @@ in {
       default = [ ];
     };
 
+    message-size-limit = mkOption {
+      type = int;
+      description = "Max allowed size of messages, in megabytes.";
+      default = 100;
+    };
+
     blacklist = {
       senders = mkOption {
         type = listOf str;
