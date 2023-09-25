@@ -41,10 +41,16 @@ in {
       default = [ ];
     };
 
-    metricsPort = mkOption {
+    metrics-port = mkOption {
       type = port;
       description = "Port on which to serve metrics.";
       default = metricsPort;
+    };
+
+    trusted-networks = mkOption {
+      type = listOf str;
+      description = "List of networks to be considered trusted.";
+      default = [ ];
     };
 
     ldap = {
@@ -401,7 +407,7 @@ in {
           metrics-proxy = {
             service = {
               networks = [ "internal_network" ];
-              ports = [ "${toString cfg.metricsPort}:80" ];
+              ports = [ "${toString cfg.metrics-port}:80" ];
             };
             nixos = {
               useSystemd = true;
