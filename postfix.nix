@@ -232,9 +232,10 @@ in {
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
-        makeRestrictionsList = concatStringsSep "\n";
+        makeRestrictionsList = lst:
+          concatStringsSep "\n" (map (line: "  ${line}" lst));
 
-        sender-restrictions = makeRestrictionsList ([
+        sender-restrictions = ([
           "check_sender_access ${mappedFile "reject_senders"}"
           "reject_sender_login_mismatch"
           "reject_non_fqdn_sender"
@@ -244,7 +245,7 @@ in {
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "reject" ]);
 
-        relay-restrictions = makeRestrictionsList ([
+        relay-restrictions = ([
           "reject_unauth_destination"
           "reject_unauth_pipelining"
           "reject_unauth_destination"
@@ -254,7 +255,7 @@ in {
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "reject" ]);
 
-        recipient-restrictions = makeRestrictionsList ([
+        recipient-restrictions = ([
           "check_sender_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
@@ -269,13 +270,10 @@ in {
           cfg.blacklist.dns)
           ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ]);
 
-        client-restrictions = makeRestrictionsList [
-          "permit_sasl_authenticated"
-          "permit_mynetworks"
-          "reject"
-        ];
+        client-restrictions =
+          [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
-        helo-restrictions = makeRestrictionsList ([
+        helo-restrictions = ([
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
