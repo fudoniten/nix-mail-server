@@ -213,9 +213,9 @@ in {
     };
 
     systemd.tmpfiles.rules = [
-      "d ${cfg.state-directory}/dovecot   0700 mailserver-dovecot   - - -"
-      "d ${cfg.state-directory}/antivirus 0700 mailserver-antivirus - - -"
-      "d ${cfg.state-directory}/dkim      0700 mailserver-dkim      - - -"
+      "d ${cfg.state-directory}/dovecot   0700 - - - -"
+      "d ${cfg.state-directory}/antivirus 0700 - - - -"
+      "d ${cfg.state-directory}/dkim      0700 - - - -"
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
