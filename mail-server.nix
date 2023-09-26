@@ -220,7 +220,7 @@ in {
 
     virtualisation.arion.projects.mail-server.settings = let
       image = { pkgs, ... }: {
-        project.name = "fudo-mailserver";
+        project.name = "mail-server";
         networks = {
           external_network.internal = false;
           internal_network.internal = true;
