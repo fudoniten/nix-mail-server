@@ -184,9 +184,9 @@ in {
 
     systemd = {
       tmpfiles.rules = [
-        "d ${cfg.state-directory} 0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/mail 0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/sieves 0750 ${cfg.mail-user} ${cfg.mail-group} - -"
+        "d ${cfg.state-directory}        0750 ${cfg.mail-user} ${cfg.mail-group} - -"
+        "d ${cfg.state-directory}/mail   0750 ${cfg.mail-user} ${cfg.mail-group} - -"
+        "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} - - -"
       ];
 
       services.dovecot-sieve-generator = let
@@ -206,12 +206,12 @@ in {
       in {
         wantedBy = [ "dovecot2.service" ];
         before = [ "dovecot2.service" ];
+        path = [ dovecot_pigeonhole ];
         serviceConfig = {
           User = config.services.dovecot2.user;
           ReadWritePaths = [ sieveDirectory ];
           ExecStart = pkgs.writeShellScript "generate-sieves.sh"
             (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
-          PrivateNetwork = true;
           PrivateDevices = true;
           PrivateTmp = true;
           PrivateMounts = true;
@@ -219,7 +219,6 @@ in {
           ProtectKernelTunables = true;
           ProtectKernelModules = true;
           ProtectSystem = true;
-          ProtectHostname = true;
           ProtectHome = true;
           ProtectClock = true;
           ProtectKernelLogs = true;
