@@ -347,7 +347,8 @@ in {
 
           message_size_limit = toString (cfg.message-size-limit * 1024 * 1024);
 
-          stmpd_banner = "${cfg.hostname} ESMTP NO UCE";
+          # Not used?
+          # stmpd_banner = "${cfg.hostname} ESMTP NO UCE";
 
           tls_eecdh_strong_curve = "prime256v1";
           tls_eecdh_ultra_curve = "secp384r1";
@@ -360,7 +361,7 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_local_domain = cfg.sasl-domain;
-          smtp_sasl_authenticated_header = "yes";
+          smtpd_sasl_authenticated_header = "yes";
 
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_tls_security_options = "noanonymous";
@@ -385,7 +386,7 @@ in {
             "inet:${cfg.dkim-server.host}:${toString cfg.dkim-server.port}"
           ];
 
-          helo_required = true;
+          smtpd_helo_required = true;
 
           smtpd_relay_restrictions = relay-restrictions;
 
@@ -435,12 +436,14 @@ in {
 
         submissionOptions = let makeRestrictionsList = concatStringsSep ",";
         in {
+          smtpd_helo_required = true;
           smtpd_tls_security_level = "encrypt";
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_type = "dovecot";
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
+          smtpd_helo_restrictions = makeRestrictionsList helo-restrictions;
           smtpd_client_restrictions = makeRestrictionsList client-restrictions;
           smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
           smtpd_recipient_restrictions =
