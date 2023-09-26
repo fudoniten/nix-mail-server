@@ -215,7 +215,7 @@ in {
 
           service auth-worker {
             user = ${config.services.dovecot2.user}
-            idle_kill = 3
+            idle_kill = 3s
           }
         '';
       };
