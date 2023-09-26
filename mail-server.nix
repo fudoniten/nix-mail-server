@@ -212,31 +212,6 @@ in {
       };
     };
 
-    users = {
-      users = {
-        mailserver-dovecot = {
-          uid = 4455;
-          isSystemUser = true;
-          group = "mailserver-dovecot";
-        };
-        mailserver-antivirus = {
-          uid = 4456;
-          isSystemUser = true;
-          group = "mailserver-antivirus";
-        };
-        mailserver-dkim = {
-          uid = 4457;
-          isSystemUser = true;
-          group = "mailserver-dkim";
-        };
-      };
-      groups = {
-        mailserver-dovecot = { };
-        mailserver-antivirus = { };
-        mailserver-dkim = { };
-      };
-    };
-
     systemd.tmpfiles.rules = [
       "d ${cfg.state-directory}/dovecot   0700 mailserver-dovecot   - - -"
       "d ${cfg.state-directory}/antivirus 0700 mailserver-antivirus - - -"

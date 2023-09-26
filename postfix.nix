@@ -188,8 +188,10 @@ in {
       dovecot2 = {
         enable = true;
         enablePAM = false;
-        enableImap = true;
-        extraConfig = ''
+        extraConfig = let
+          mailUser = config.services.dovecot2.user;
+          mailUserUid = config.users.users."${mailUser}".uid;
+        in ''
           # Extra Config
           ${lib.optionalString cfg.debug "auth_debug = yes"}
 
@@ -204,8 +206,8 @@ in {
           }
 
           userdb = {
-            driver = ldap
-            args = ${cfg.ldap-conf}
+            driver = static
+            args = uid=${toString mailUserUid} home=/tmp/%u
           }
 
           service auth {

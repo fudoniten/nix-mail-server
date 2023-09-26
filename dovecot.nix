@@ -245,7 +245,7 @@ in {
 
         mailUser = cfg.mail-user;
         mailGroup = cfg.mail-group;
-        mailLocation = "maildir:${cfg.state-directory}/mail//%u/";
+        mailLocation = "maildir:${cfg.state-directory}/mail/%u/";
         createMailUser = false;
 
         sslServerCert = cfg.ssl.certificate;
