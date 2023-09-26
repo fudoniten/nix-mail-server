@@ -232,10 +232,7 @@ in {
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
-        makeRestrictionsList = lst:
-          concatStringsSep "\n" (map (line: "  ${line}" lst));
-
-        sender-restrictions = ([
+        sender-restrictions = [
           "check_sender_access ${mappedFile "reject_senders"}"
           "reject_sender_login_mismatch"
           "reject_non_fqdn_sender"
@@ -243,9 +240,9 @@ in {
           "permit_mynetworks"
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ]);
+          cfg.blacklist.dns) ++ [ "reject" ];
 
-        relay-restrictions = ([
+        relay-restrictions = [
           "reject_unauth_destination"
           "reject_unauth_pipelining"
           "reject_unauth_destination"
@@ -253,9 +250,9 @@ in {
           "permit_mynetworks"
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ]);
+          cfg.blacklist.dns) ++ [ "reject" ];
 
-        recipient-restrictions = ([
+        recipient-restrictions = [
           "check_sender_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
@@ -268,18 +265,18 @@ in {
           "check_policy_service unix:private/policy-spf"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns)
-          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ]);
+          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
 
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
-        helo-restrictions = ([
+        helo-restrictions = [
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
           "reject_unknown_helo_hostname"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit" ]);
+          cfg.blacklist.dns) ++ [ "permit" ];
 
       in {
         enable = true;
@@ -436,16 +433,18 @@ in {
           tls_random_source = "dev:/dev/urandom";
         };
 
-        submissionOptions = {
+        submissionOptions = let makeRestrictionsList = concatStringsSep ",";
+        in {
           smtpd_tls_security_level = "encrypt";
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_type = "dovecot";
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_client_restrictions = client-restrictions;
-          smtpd_sender_restrictions = sender-restrictions;
-          smtpd_recipient_restrictions = recipient-restrictions;
+          smtpd_client_restrictions = makeRestrictionsList client-restrictions;
+          smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
+          smtpd_recipient_restrictions =
+            makeRestrictionsList recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
