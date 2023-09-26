@@ -205,11 +205,6 @@ in {
             args = ${cfg.ldap-conf}
           }
 
-          userdb = {
-            driver = static
-            args = uid=${toString mailUserUid} home=/tmp/%u
-          }
-
           service auth {
             unix_listener auth {
               mode = 0600
