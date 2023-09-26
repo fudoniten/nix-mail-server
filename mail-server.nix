@@ -258,9 +258,6 @@ in {
           authPort = 5447;
           userdbPort = 5448;
           dkimPort = 5734;
-          mkUserMap = username:
-            let uid = config.users.users."${username}".uid;
-            in "${toString uid}:${toString uid}";
 
         in {
           smtp = {
@@ -330,7 +327,6 @@ in {
             service = {
               networks = [ "internal_network" ];
               ports = [ "143:143" "993:993" ];
-              user = mkUserMap "mailserver-dovecot";
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
@@ -417,7 +413,6 @@ in {
                 # Needs external access for database updates
                 "external_network"
               ];
-              user = mkUserMap "mailserver-antivirus";
               volumes = [ "${cfg.state-directory}/antivirus:/state" ];
             };
             nixos = {
@@ -437,7 +432,6 @@ in {
           dkim = {
             service = {
               networks = [ "internal_network" ];
-              user = mkUserMap "mailserver-dkim";
               volumes = [ "${cfg.state-directory}/dkim:/state" ];
             };
             nixos = {
