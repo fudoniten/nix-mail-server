@@ -436,7 +436,7 @@ in {
 
         submissionOptions = let makeRestrictionsList = concatStringsSep ",";
         in {
-          smtpd_helo_required = true;
+          smtpd_helo_required = "yes";
           smtpd_tls_security_level = "encrypt";
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_type = "dovecot";
