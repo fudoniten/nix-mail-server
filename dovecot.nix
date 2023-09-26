@@ -200,8 +200,8 @@ in {
             filePath = ./sieves + "/${filename}";
             fileBaseName = stripExt "sieve" filename;
           in ''
-            sievec ${filePath} ${sieveDirectory}/${fileBaseName}.svbin
             cp ${filePath} ${sieveDirectory}/${fileBaseName}.sieve
+            sievec ${sieveDirectory}/${fileBaseName}.sieve ${sieveDirectory}/${fileBaseName}.svbin
           '';
       in {
         wantedBy = [ "dovecot2.service" ];
