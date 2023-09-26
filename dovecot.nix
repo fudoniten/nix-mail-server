@@ -206,7 +206,7 @@ in {
       in {
         wantedBy = [ "dovecot2.service" ];
         before = [ "dovecot2.service" ];
-        path = [ dovecot_pigeonhole ];
+        path = with pkgs; [ dovecot_pigeonhole ];
         serviceConfig = {
           User = config.services.dovecot2.user;
           ReadWritePaths = [ sieveDirectory ];
