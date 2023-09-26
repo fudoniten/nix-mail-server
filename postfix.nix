@@ -188,7 +188,7 @@ in {
       dovecot2 = {
         enable = true;
         enablePAM = false;
-        enableImap = false;
+        enableImap = true;
         extraConfig = ''
           # Extra Config
           ${lib.optionalString cfg.debug "auth_debug = yes"}

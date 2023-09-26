@@ -331,7 +331,6 @@ in {
             # user = root
           }
 
-
           passdb {
             driver = ldap
             args = ${cfg.ldap-conf}
