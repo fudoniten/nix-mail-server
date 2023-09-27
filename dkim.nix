@@ -103,6 +103,7 @@ in {
         group = config.services.opendkim.group;
       in [ "d ${cfg.state-directory} 0700 ${user} ${group} - -" ];
       services.opendkim = {
+        path = with pkgs; [ opendkim ];
         serviceConfig = {
           ExecStartPre = [
             (pkgs.writeShellScript "ensure-dkim-certs.sh"
