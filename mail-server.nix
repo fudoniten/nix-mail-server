@@ -250,9 +250,10 @@ in {
     };
 
     systemd.tmpfiles.rules = [
-      "d ${cfg.state-directory}/dovecot   0700 - - - -"
-      "d ${cfg.state-directory}/antivirus 0700 - - - -"
-      "d ${cfg.state-directory}/dkim      0700 - - - -"
+      "d ${cfg.state-directory}/dovecot            0700 - - - -"
+      "d ${cfg.state-directory}/dovecot-dhparams   0700 - - - -"
+      "d ${cfg.state-directory}/antivirus          0700 - - - -"
+      "d ${cfg.state-directory}/dkim               0700 - - - -"
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
@@ -343,6 +344,7 @@ in {
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap"
+                "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
               ];
               depends_on = [ "antispam" "ldap-proxy" ];
             };
