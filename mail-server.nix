@@ -176,14 +176,51 @@ in {
   };
 
   config = mkIf cfg.enable {
-    services.nginx = {
-      virtualHosts = {
-        "${cfg.smtp.hostname}".locations."/metrics" = {
-          proxyPass = "http://localhost:${toString metricsPort}/metrics";
+    services = {
+      nginx = {
+        virtualHosts = {
+          "${cfg.smtp.hostname}".locations."/metrics" = {
+            proxyPass = "http://localhost:${toString metricsPort}/metrics";
+          };
+          "${cfg.imap.hostname}".locations."/metrics" = {
+            proxyPass = "http://localhost:${toString metricsPort}/metrics";
+          };
         };
-        "${cfg.imap.hostname}".locations."/metrics" = {
-          proxyPass = "http://localhost:${toString metricsPort}/metrics";
-        };
+      };
+
+      xinetd = {
+        enable = true;
+        services = let
+          genService = { name, port, protocols ? [ "tcp" ] }:
+            map (protocol: {
+              inherit name;
+              service = "/usr/bin/env";
+              extraConfig = "redirect = 127.0.0.1 ${toString port}";
+            }) protocols;
+        in concatMap genService [
+          {
+            name = "imap";
+            port = 9143;
+          }
+          {
+            name = "imaps";
+            port = 9993;
+          }
+          {
+            name = "smtp";
+            port = 9025;
+            protocols = [ "tcp" "udp" ];
+          }
+          {
+            name = "submission";
+            port = 9587;
+            protocols = [ "tcp" "udp" ];
+          }
+          {
+            name = "submissions";
+            port = 9465;
+          }
+        ];
       };
     };
 
@@ -246,7 +283,7 @@ in {
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
-              ports = [ "25:25" "587:587" "465:465" "2525:2525" ];
+              ports = [ "9025:25" "9587:587" "9465:465" ];
               depends_on = [ "imap" "ldap-proxy" ];
             };
             nixos = {
@@ -301,7 +338,7 @@ in {
           imap = {
             service = {
               networks = [ "internal_network" ];
-              ports = [ "143:143" "993:993" ];
+              ports = [ "9143:143" "9993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
