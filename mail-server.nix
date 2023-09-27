@@ -194,7 +194,7 @@ in {
           genService = { name, port, protocols ? [ "tcp" ] }:
             map (protocol: {
               inherit name;
-              service = "/usr/bin/env";
+              server = "/usr/bin/env";
               extraConfig = "redirect = 127.0.0.1 ${toString port}";
             }) protocols;
         in concatMap genService [
