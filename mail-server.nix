@@ -276,11 +276,11 @@ in {
         in {
           smtp = {
             service = {
-              # networks = [
-              #   "internal_network"
-              #   # Needs access to internet to forward emails
-              #   "external_network"
-              # ];
+              networks = [
+                "internal_network"
+                # Needs access to internet to forward emails
+                "external_network"
+              ];
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
@@ -293,7 +293,7 @@ in {
               configuration = {
                 imports = [ ./dovecot.nix ./postfix.nix ];
 
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
                 fudo.mail.postfix = {
@@ -339,7 +339,7 @@ in {
           };
           imap = {
             service = {
-              # networks = [ "internal_network" ];
+              networks = [ "internal_network" ];
               ports = [ "9143:143" "9993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
@@ -353,7 +353,7 @@ in {
               useSystemd = true;
               configuration = {
                 imports = [ ./dovecot.nix ];
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 fudo.mail.dovecot = {
                   enable = true;
@@ -383,28 +383,29 @@ in {
           ldap-proxy.service = {
             image = cfg.images.ldap-proxy;
             restart = "always";
-            # networks = [
-            #   "internal_network"
-            #   # Needs access to external network for user lookups
-            #   "external_network"
-            # ];
+            networks = [
+              "internal_network"
+              # Needs access to external network for user lookups
+              "external_network"
+            ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
           };
           antispam = {
             service = {
-              # networks = [
-              #   "internal_network"
-              #   # Needs external access for blacklist checks
-              #   "external_network"
-              # ];
+              networks = [
+                "internal_network"
+                # Needs external access for blacklist checks
+                "external_network"
+                "redis_network"
+              ];
               capabilities.SYS_ADMIN = true;
-              depends_on = [ "antivirus" ];
+              depends_on = [ "antivirus" "redis" ];
             };
             nixos = {
               useSystemd = true;
               configuration = {
                 imports = [ ./rspamd.nix ];
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 fudo.mail.rspamd = {
                   enable = true;
@@ -423,18 +424,18 @@ in {
           };
           antivirus = {
             service = {
-              # networks = [
-              #   "internal_network"
-              #   # Needs external access for database updates
-              #   "external_network"
-              # ];
+              networks = [
+                "internal_network"
+                # Needs external access for database updates
+                "external_network"
+              ];
               volumes = [ "${cfg.state-directory}/antivirus:/state" ];
             };
             nixos = {
               useSystemd = true;
               configuration = {
                 imports = [ ./clamav.nix ];
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 fudo.mail.clamav = {
                   enable = true;
@@ -446,14 +447,14 @@ in {
           };
           dkim = {
             service = {
-              # networks = [ "internal_network" ];
+              networks = [ "internal_network" ];
               volumes = [ "${cfg.state-directory}/dkim:/state" ];
             };
             nixos = {
               useSystemd = true;
               configuration = {
                 imports = [ ./dkim.nix ];
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 fudo.mail.dkim = {
                   enable = true;
@@ -465,16 +466,35 @@ in {
               };
             };
           };
+          redis = {
+            service = {
+              volumes = [ "${cfg.state-directory}/redis:/var/lib/redis" ];
+              networks = [ "redis_network" ];
+            };
+            nixos = {
+              useSystemd = true;
+              configuration = {
+                boot.tmp.useTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                services.redis.servers."rspamd" = {
+                  enable = true;
+                  # null -> all
+                  bind = null;
+                  port = 6379;
+                };
+              };
+            };
+          };
           metrics-proxy = {
             service = {
-              # networks = [ "internal_network" ];
+              networks = [ "internal_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
               depends_on = [ "smtp" "imap" "antispam" ];
             };
             nixos = {
               useSystemd = true;
               configuration = {
-                boot.tmpOnTmpfs = true;
+                boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 services.nginx = {
                   enable = true;

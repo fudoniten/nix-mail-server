@@ -63,11 +63,180 @@ in {
           }
         '';
 
-        # "rbl.conf".text = ''
-        #   rbls {
-        #     an_rbl
-        #   }
-        # '';
+        "neural.conf".text = ''
+          symbols = {
+            "NEURAL_SPAM" = {
+              weight = 3.0;
+              description = "Neural network spam";
+            }
+            "NEURAL_HAM" = {
+              weight = -3.0;
+              description = "Neural network ham";
+            }
+          }
+        '';
+
+        "dmark.conf".text = ''
+          dmarc = {
+            servers = "redis";
+          }
+        '';
+
+        "mx_check.conf".text = ''
+          enabled = true;
+
+          servers = "redis";
+
+          timeout = 10.0;
+
+          exclude_domains = [
+            "https://maps.rspamd.com/freemail/disposable.txt.zst",
+            "https://maps.rspamd.com/freemail/free.txt.zst",
+          ];
+        '';
+
+        "reputation.conf".text = ''
+          rules {
+            ip_reputation = {
+              selector "ip" {
+              }
+              backend "redis" {
+                servers = "redis";
+              }
+
+              symbol = "IP_REPUTATION";
+            }
+            spf_reputation =  {
+              selector "spf" {
+              }
+              backend "redis" {
+                servers = "redis";
+              }
+
+              symbol = "SPF_REPUTATION";
+            }
+            dkim_reputation =  {
+              selector "dkim" {
+              }
+              backend "redis" {
+                servers = "redis";
+              }
+
+              symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
+            }
+            generic_reputation =  {
+              selector "generic" {
+                selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
+              }
+              backend "redis" {
+                servers = "redis";
+              }
+
+              symbol = "GENERIC_REPUTATION";
+            }
+          }
+        '';
+
+        "rbl.conf".text = ''
+          surbl {
+            rules {
+              "SURBL_MULTI" {
+                ignore_defaults = true; # for compatibility with old defaults
+                rbl = "multi.surbl.org";
+                checks = ['emails', 'dkim', 'urls'];
+                emails_domainonly = true;
+                urls = true;
+
+                returnbits = {
+                  CRACKED_SURBL = 128; # From February 2016
+                  ABUSE_SURBL = 64;
+                  MW_SURBL_MULTI = 16;
+                  PH_SURBL_MULTI = 8;
+                  SURBL_BLOCKED = 1;
+                }
+                        }
+
+              "URIBL_MULTI" {
+                ignore_defaults = true; # for compatibility with old defaults
+                rbl = "multi.uribl.com";
+                checks = ['emails', 'dkim', 'urls'];
+                emails_domainonly = true;
+
+                returnbits = {
+                  URIBL_BLOCKED = 1;
+                  URIBL_BLACK = 2;
+                  URIBL_GREY = 4;
+                  URIBL_RED = 8;
+                }
+              }
+
+              "RSPAMD_URIBL" {
+                ignore_defaults = true; # for compatibility with old defaults
+                rbl = "uribl.rspamd.com";
+                checks = ['emails', 'dkim', 'urls'];
+                # Also check images
+                images = true;
+                # Check emails for URLs
+                emails_domainonly = true;
+                # Hashed BL
+                hash = 'blake2';
+                hash_len = 32;
+                hash_format = 'base32';
+
+                returncodes = {
+                  RSPAMD_URIBL = [
+                    "127.0.0.2",
+                  ];
+                }
+              }
+
+              "DBL" {
+                ignore_defaults = true; # for compatibility with old defaults
+                rbl = "dbl.spamhaus.org";
+                no_ip = true;
+                checks = ['emails', 'dkim', 'urls'];
+                emails_domainonly = true;
+
+                returncodes = {
+                  # spam domain
+                  DBL_SPAM = "127.0.1.2";
+                  # phish domain
+                  DBL_PHISH = "127.0.1.4";
+                  # malware domain
+                  DBL_MALWARE = "127.0.1.5";
+                  # botnet C&C domain
+                  DBL_BOTNET = "127.0.1.6";
+                  # abused legit spam
+                  DBL_ABUSE = "127.0.1.102";
+                  # abused spammed redirector domain
+                  DBL_ABUSE_REDIR = "127.0.1.103";
+                  # abused legit phish
+                  DBL_ABUSE_PHISH = "127.0.1.104";
+                  # abused legit malware
+                  DBL_ABUSE_MALWARE = "127.0.1.105";
+                  # abused legit botnet C&C
+                  DBL_ABUSE_BOTNET = "127.0.1.106";
+                  # error - IP queries prohibited!
+                  DBL_PROHIBIT = "127.0.1.255";
+                  # issue #3074
+                  DBL_BLOCKED_OPENRESOLVER = "127.255.255.254";
+                  DBL_BLOCKED = "127.255.255.255";
+                }
+              }
+
+              "SEM_URIBL_UNKNOWN" {
+                ignore_defaults = true; # for compatibility with old defaults
+                rbl = "uribl.spameatingmonkey.net";
+                no_ip = true;
+                checks = ['emails', 'dkim', 'urls'];
+                emails_domainonly = true;
+                returnbits {
+                  SEM_URIBL = 2;
+                }
+              }
+            }
+          }
+        '';
       };
 
       overrides."milter_headers.conf".text = "extended_spam_headers = true;";
