@@ -267,6 +267,16 @@ in {
           cfg.blacklist.dns)
           ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
 
+        submission-sender-restrictions = [
+          "check_sender_access,${mappedFile "reject_senders"}"
+          "reject_sender_login_mismatch"
+          "reject_non_fqdn_sender"
+          "reject_unknown_sender_domain"
+          "permit_mynetworks"
+          "permit_sasl_authenticated"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns) ++ [ "reject" ];
+
         submission-recipient-restrictions = [
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
