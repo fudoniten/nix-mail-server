@@ -38,7 +38,7 @@ in {
       };
     };
 
-    redis.password-file = mkOption {
+    redis.password = mkOption {
       type = str;
       description = "Password with which to connect to Redis.";
     };
@@ -51,8 +51,7 @@ in {
       port = cfg.ports.metrics;
     };
 
-    services.rspamd = let redisPasswd = readFile cfg.redis.password-file;
-    in {
+    services.rspamd = {
       enable = true;
 
       locals = {
@@ -65,7 +64,7 @@ in {
             type = "clamav";
             log_clean = true;
             servers = "${cfg.antivirus.host}:${toString cfg.antivirus.port}";
-            password = "${redisPasswd}";
+            password = "${cfg.redis.password}";
             scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
           }
         '';
@@ -86,7 +85,7 @@ in {
         "dmark.conf".text = ''
           dmarc = {
             servers = "redis";
-            password = "${redisPasswd}";
+            password = "${cfg.redis.password}";
           }
         '';
 
@@ -94,7 +93,7 @@ in {
           enabled = true;
 
           servers = "redis";
-          password = "${redisPasswd}";
+          password = "${cfg.redis.password}";
 
           timeout = 10.0;
 
@@ -111,7 +110,7 @@ in {
               }
               backend "redis" {
                 servers = "redis";
-                password = "${redisPasswd}";
+                password = "${cfg.redis.password}";
               }
 
               symbol = "IP_REPUTATION";
@@ -121,7 +120,7 @@ in {
               }
               backend "redis" {
                 servers = "redis";
-                password = "${redisPasswd}";
+                password = "${cfg.redis.password}";
               }
 
               symbol = "SPF_REPUTATION";
@@ -131,7 +130,7 @@ in {
               }
               backend "redis" {
                 servers = "redis";
-                password = "${redisPasswd}";
+                password = "${cfg.redis.password}";
               }
 
               symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
@@ -142,7 +141,7 @@ in {
               }
               backend "redis" {
                 servers = "redis";
-                password = "${redisPasswd}";
+                password = "${cfg.redis.password}";
               }
 
               symbol = "GENERIC_REPUTATION";

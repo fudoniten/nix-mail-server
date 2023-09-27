@@ -405,7 +405,6 @@ in {
               ];
               capabilities.SYS_ADMIN = true;
               depends_on = [ "antivirus" "redis" ];
-              volumes = [ "${redisPasswdFile}:/run/redis.passwd" ];
             };
             nixos = {
               useSystemd = true;
@@ -424,7 +423,7 @@ in {
                     host = "antivirus";
                     port = antivirusPort;
                   };
-                  redis.password-file = "/run/redis.passwd";
+                  redis.password = readFile redisPasswdFile;
                 };
               };
             };
