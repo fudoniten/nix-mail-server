@@ -184,7 +184,7 @@ in {
 
     systemd = {
       tmpfiles.rules = [
-        "d ${cfg.state-directory}        0750 ${cfg.mail-user} ${cfg.mail-group} - -"
+        "d ${cfg.state-directory}        0751 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/mail   0750 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} - - -"
       ];
