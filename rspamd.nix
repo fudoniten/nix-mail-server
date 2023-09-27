@@ -38,9 +38,11 @@ in {
       };
     };
 
-    redis.password-file = {
-      type = str;
-      description = "Password with which to connect to Redis.";
+    redis = {
+      password-file = {
+        type = str;
+        description = "Password with which to connect to Redis.";
+      };
     };
   };
 
