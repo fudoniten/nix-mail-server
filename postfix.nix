@@ -436,6 +436,25 @@ in {
 
         submissionOptions = let makeRestrictionsList = concatStringsSep ",";
         in {
+          milter_macro_daemon_name = "ORIGINATING";
+          smtpd_helo_required = "yes";
+          smtpd_tls_security_level = "encrypt";
+          smtpd_sasl_auth_enable = "yes";
+          smtpd_sasl_type = "dovecot";
+          smtpd_sasl_path = "/run/dovecot2/auth";
+          smtpd_sasl_security_options = "noanonymous";
+          smtpd_sasl_local_domain = cfg.domain;
+          smtpd_helo_restrictions = makeRestrictionsList helo-restrictions;
+          smtpd_client_restrictions = makeRestrictionsList client-restrictions;
+          smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
+          smtpd_recipient_restrictions =
+            makeRestrictionsList recipient-restrictions;
+          cleanup_service_name = "submission-header-cleanup";
+        };
+
+        submissionsOptions = let makeRestrictionsList = concatStringsSep ",";
+        in {
+          milter_macro_daemon_name = "ORIGINATING";
           smtpd_helo_required = "yes";
           smtpd_tls_security_level = "encrypt";
           smtpd_sasl_auth_enable = "yes";
@@ -455,9 +474,11 @@ in {
           # See: http://www.postfix.org/smtp.8.html
           lmtp.args = [ "flags=DO" ];
           policy-spf = let
-            policydSpfConfig = concatStringsSep "\n"
-              ([ cfg.policy-spf.extra-config ]
-                ++ (lib.optional cfg.debug "debugLevel = 4"));
+            policydSpfConfig = pkgs.writeText "policyd-spf.conf"
+              (concatStringsSep "\n" ([ cfg.policy-spf.extra-config ]
+                ++ (lib.optional cfg.debug ''
+                  debugLevel=4
+                '')));
           in {
             type = "unix";
             privileged = true;
