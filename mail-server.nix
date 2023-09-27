@@ -260,10 +260,11 @@ in {
     virtualisation.arion.projects.mail-server.settings = let
       image = { pkgs, ... }: {
         project.name = "mail-server";
-        # networks = {
-        #   external_network.internal = false;
-        #   internal_network.internal = true;
-        # };
+        networks = {
+          external_network.internal = false;
+          internal_network.internal = true;
+          redis_network.internal = true;
+        };
         services = let
           antivirusPort = 15407;
           antispamPort = 11335;
