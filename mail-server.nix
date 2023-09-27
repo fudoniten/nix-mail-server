@@ -259,7 +259,7 @@ in {
 
     virtualisation.arion.projects.mail-server.settings = let
       redisPasswdFile =
-        pkgs.lib.passwd.stablerandom-password-file "mail-server-redis-passwd"
+        pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
         config.instance.build-seed;
 
       image = { pkgs, ... }: {
