@@ -290,7 +290,7 @@ in {
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
-              ports = [ "9025:25" "9587:587" "9465:465" ];
+              ports = [ "25:25" "587:587" "465:465" ];
               depends_on = [ "imap" "ldap-proxy" ];
             };
             nixos = {
@@ -345,7 +345,7 @@ in {
           imap = {
             service = {
               networks = [ "internal_network" ];
-              ports = [ "9143:143" "9993:993" ];
+              ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
