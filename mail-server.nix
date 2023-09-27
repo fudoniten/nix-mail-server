@@ -392,11 +392,11 @@ in {
           };
           antispam = {
             service = {
-              networks = [
-                "internal_network"
-                # Needs external access for blacklist checks
-                "external_network"
-              ];
+              # networks = [
+              #   "internal_network"
+              #   # Needs external access for blacklist checks
+              #   "external_network"
+              # ];
               capabilities.SYS_ADMIN = true;
               depends_on = [ "antivirus" ];
             };
