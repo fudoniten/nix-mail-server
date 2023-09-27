@@ -267,6 +267,20 @@ in {
           cfg.blacklist.dns)
           ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
 
+        submission-recipient-restrictions = [
+          "reject_unknown_sender_domain"
+          "reject_unknown_recipient_domain"
+          "reject_unauth_pipelining"
+          "reject_unauth_destination"
+          "reject_invalid_hostname"
+          "reject_non_fqdn_hostname"
+          "reject_non_fqdn_sender"
+          "reject_non_fqdn_recipient"
+          "permit_mynetworks"
+          "permit_sasl_authenticated"
+          "reject"
+        ];
+
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
@@ -448,7 +462,7 @@ in {
           smtpd_client_restrictions = makeRestrictionsList client-restrictions;
           smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
           smtpd_recipient_restrictions =
-            makeRestrictionsList recipient-restrictions;
+            makeRestrictionsList submission-recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
@@ -466,7 +480,7 @@ in {
           smtpd_client_restrictions = makeRestrictionsList client-restrictions;
           smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
           smtpd_recipient_restrictions =
-            makeRestrictionsList recipient-restrictions;
+            makeRestrictionsList submission-recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
