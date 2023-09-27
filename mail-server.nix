@@ -188,40 +188,41 @@ in {
         };
       };
 
-      xinetd = {
-        enable = true;
-        services = let
-          genService = { name, port, protocols ? [ "tcp" ] }:
-            map (protocol: {
-              inherit name;
-              server = "/usr/bin/env";
-              extraConfig = "redirect = 127.0.0.1 ${toString port}";
-            }) protocols;
-        in concatMap genService [
-          {
-            name = "imap";
-            port = 9143;
-          }
-          {
-            name = "imaps";
-            port = 9993;
-          }
-          {
-            name = "smtp";
-            port = 9025;
-            protocols = [ "tcp" "udp" ];
-          }
-          {
-            name = "submission";
-            port = 9587;
-            protocols = [ "tcp" "udp" ];
-          }
-          {
-            name = "submissions";
-            port = 9465;
-          }
-        ];
-      };
+      ## No...these ports were already open
+      # xinetd = {
+      #   enable = true;
+      #   services = let
+      #     genService = { name, port, protocols ? [ "tcp" ] }:
+      #       map (protocol: {
+      #         inherit name;
+      #         server = "/usr/bin/env";
+      #         extraConfig = "redirect = 127.0.0.1 ${toString port}";
+      #       }) protocols;
+      #   in concatMap genService [
+      #     {
+      #       name = "imap";
+      #       port = 9143;
+      #     }
+      #     {
+      #       name = "imaps";
+      #       port = 9993;
+      #     }
+      #     {
+      #       name = "smtp";
+      #       port = 9025;
+      #       protocols = [ "tcp" "udp" ];
+      #     }
+      #     {
+      #       name = "submission";
+      #       port = 9587;
+      #       protocols = [ "tcp" "udp" ];
+      #     }
+      #     {
+      #       name = "submissions";
+      #       port = 9465;
+      #     }
+      #   ];
+      # };
     };
 
     fudo.secrets.host-secrets."${hostname}" = {
@@ -259,10 +260,10 @@ in {
     virtualisation.arion.projects.mail-server.settings = let
       image = { pkgs, ... }: {
         project.name = "mail-server";
-        networks = {
-          external_network.internal = false;
-          internal_network.internal = true;
-        };
+        # networks = {
+        #   external_network.internal = false;
+        #   internal_network.internal = true;
+        # };
         services = let
           antivirusPort = 15407;
           antispamPort = 11335;
@@ -275,11 +276,11 @@ in {
         in {
           smtp = {
             service = {
-              networks = [
-                "internal_network"
-                # Needs access to internet to forward emails
-                "external_network"
-              ];
+              # networks = [
+              #   "internal_network"
+              #   # Needs access to internet to forward emails
+              #   "external_network"
+              # ];
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
@@ -338,7 +339,7 @@ in {
           };
           imap = {
             service = {
-              networks = [ "internal_network" ];
+              # networks = [ "internal_network" ];
               ports = [ "9143:143" "9993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
@@ -382,11 +383,11 @@ in {
           ldap-proxy.service = {
             image = cfg.images.ldap-proxy;
             restart = "always";
-            networks = [
-              "internal_network"
-              # Needs access to external network for user lookups
-              "external_network"
-            ];
+            # networks = [
+            #   "internal_network"
+            #   # Needs access to external network for user lookups
+            #   "external_network"
+            # ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
           };
           antispam = {
@@ -422,11 +423,11 @@ in {
           };
           antivirus = {
             service = {
-              networks = [
-                "internal_network"
-                # Needs external access for database updates
-                "external_network"
-              ];
+              # networks = [
+              #   "internal_network"
+              #   # Needs external access for database updates
+              #   "external_network"
+              # ];
               volumes = [ "${cfg.state-directory}/antivirus:/state" ];
             };
             nixos = {
@@ -445,7 +446,7 @@ in {
           };
           dkim = {
             service = {
-              networks = [ "internal_network" ];
+              # networks = [ "internal_network" ];
               volumes = [ "${cfg.state-directory}/dkim:/state" ];
             };
             nixos = {
@@ -466,7 +467,7 @@ in {
           };
           metrics-proxy = {
             service = {
-              networks = [ "internal_network" ];
+              # networks = [ "internal_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
               depends_on = [ "smtp" "imap" "antispam" ];
             };
