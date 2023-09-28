@@ -45,234 +45,242 @@ in {
   };
 
   config = mkIf cfg.enable {
-    services.prometheus.exporters.rspamd = {
+    networking.firewall = {
       enable = true;
-      listenAddress = "127.0.0.1";
-      port = cfg.ports.metrics;
+      allowedTCPPorts = with cfg.ports; [ metrics controller milter ];
+      allowedUDPPorts = with cfg.ports; [ controller milter ];
     };
 
-    services.rspamd = {
-      enable = true;
-
-      locals = {
-        "milter_headers.conf".text = "extended_spam_headers = yes;";
-
-        "antivirus.conf".text = ''
-          clamav {
-            action = "reject";
-            symbol = "CLAM_VIRUS";
-            type = "clamav";
-            log_clean = true;
-            servers = "${cfg.antivirus.host}:${toString cfg.antivirus.port}";
-            scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
-          }
-        '';
-
-        "neural.conf".text = ''
-          symbols = {
-            "NEURAL_SPAM" = {
-              weight = 3.0;
-              description = "Neural network spam";
-            }
-            "NEURAL_HAM" = {
-              weight = -3.0;
-              description = "Neural network ham";
-            }
-          }
-        '';
-
-        "dmark.conf".text = ''
-          dmarc = {
-            servers = "redis";
-            password = "${cfg.redis.password}";
-          }
-        '';
-
-        "mx_check.conf".text = ''
-          enabled = true;
-
-          servers = "redis";
-          password = "${cfg.redis.password}";
-
-          timeout = 10.0;
-
-          exclude_domains = [
-            "https://maps.rspamd.com/freemail/disposable.txt.zst",
-            "https://maps.rspamd.com/freemail/free.txt.zst",
-          ];
-        '';
-
-        "reputation.conf".text = ''
-          rules {
-            ip_reputation = {
-              selector "ip" {
-              }
-              backend "redis" {
-                servers = "redis";
-                password = "${cfg.redis.password}";
-              }
-
-              symbol = "IP_REPUTATION";
-            }
-            spf_reputation =  {
-              selector "spf" {
-              }
-              backend "redis" {
-                servers = "redis";
-                password = "${cfg.redis.password}";
-              }
-
-              symbol = "SPF_REPUTATION";
-            }
-            dkim_reputation =  {
-              selector "dkim" {
-              }
-              backend "redis" {
-                servers = "redis";
-                password = "${cfg.redis.password}";
-              }
-
-              symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
-            }
-            generic_reputation =  {
-              selector "generic" {
-                selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
-              }
-              backend "redis" {
-                servers = "redis";
-                password = "${cfg.redis.password}";
-              }
-
-              symbol = "GENERIC_REPUTATION";
-            }
-          }
-        '';
-
-        "rbl.conf".text = ''
-          surbl {
-            rules {
-              "SURBL_MULTI" {
-                ignore_defaults = true; # for compatibility with old defaults
-                rbl = "multi.surbl.org";
-                checks = ['emails', 'dkim', 'urls'];
-                emails_domainonly = true;
-                urls = true;
-
-                returnbits = {
-                  CRACKED_SURBL = 128; # From February 2016
-                  ABUSE_SURBL = 64;
-                  MW_SURBL_MULTI = 16;
-                  PH_SURBL_MULTI = 8;
-                  SURBL_BLOCKED = 1;
-                }
-                        }
-
-              "URIBL_MULTI" {
-                ignore_defaults = true; # for compatibility with old defaults
-                rbl = "multi.uribl.com";
-                checks = ['emails', 'dkim', 'urls'];
-                emails_domainonly = true;
-
-                returnbits = {
-                  URIBL_BLOCKED = 1;
-                  URIBL_BLACK = 2;
-                  URIBL_GREY = 4;
-                  URIBL_RED = 8;
-                }
-              }
-
-              "RSPAMD_URIBL" {
-                ignore_defaults = true; # for compatibility with old defaults
-                rbl = "uribl.rspamd.com";
-                checks = ['emails', 'dkim', 'urls'];
-                # Also check images
-                images = true;
-                # Check emails for URLs
-                emails_domainonly = true;
-                # Hashed BL
-                hash = 'blake2';
-                hash_len = 32;
-                hash_format = 'base32';
-
-                returncodes = {
-                  RSPAMD_URIBL = [
-                    "127.0.0.2",
-                  ];
-                }
-              }
-
-              "DBL" {
-                ignore_defaults = true; # for compatibility with old defaults
-                rbl = "dbl.spamhaus.org";
-                no_ip = true;
-                checks = ['emails', 'dkim', 'urls'];
-                emails_domainonly = true;
-
-                returncodes = {
-                  # spam domain
-                  DBL_SPAM = "127.0.1.2";
-                  # phish domain
-                  DBL_PHISH = "127.0.1.4";
-                  # malware domain
-                  DBL_MALWARE = "127.0.1.5";
-                  # botnet C&C domain
-                  DBL_BOTNET = "127.0.1.6";
-                  # abused legit spam
-                  DBL_ABUSE = "127.0.1.102";
-                  # abused spammed redirector domain
-                  DBL_ABUSE_REDIR = "127.0.1.103";
-                  # abused legit phish
-                  DBL_ABUSE_PHISH = "127.0.1.104";
-                  # abused legit malware
-                  DBL_ABUSE_MALWARE = "127.0.1.105";
-                  # abused legit botnet C&C
-                  DBL_ABUSE_BOTNET = "127.0.1.106";
-                  # error - IP queries prohibited!
-                  DBL_PROHIBIT = "127.0.1.255";
-                  # issue #3074
-                  DBL_BLOCKED_OPENRESOLVER = "127.255.255.254";
-                  DBL_BLOCKED = "127.255.255.255";
-                }
-              }
-
-              "SEM_URIBL_UNKNOWN" {
-                ignore_defaults = true; # for compatibility with old defaults
-                rbl = "uribl.spameatingmonkey.net";
-                no_ip = true;
-                checks = ['emails', 'dkim', 'urls'];
-                emails_domainonly = true;
-                returnbits {
-                  SEM_URIBL = 2;
-                }
-              }
-            }
-          }
-        '';
+    services = {
+      prometheus.exporters.rspamd = {
+        enable = true;
+        listenAddress = "127.0.0.1";
+        port = cfg.ports.metrics;
       };
 
-      overrides."milter_headers.conf".text = "extended_spam_headers = true;";
+      rspamd = {
+        enable = true;
 
-      workers = {
-        rspamd_proxy = {
-          type = "rspamd_proxy";
-          bindSockets = [ "*:${toString cfg.ports.milter}" ];
-          count = 4;
-          extraConfig = ''
-            milter = yes;
-            timeout = 120s;
+        locals = {
+          "milter_headers.conf".text = "extended_spam_headers = yes;";
 
-            upstream "local" {
-              default = yes;
-              self_scan = yes;
+          "antivirus.conf".text = ''
+            clamav {
+              action = "reject";
+              symbol = "CLAM_VIRUS";
+              type = "clamav";
+              log_clean = true;
+              servers = "${cfg.antivirus.host}:${toString cfg.antivirus.port}";
+              scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
+            }
+          '';
+
+          "neural.conf".text = ''
+            symbols = {
+              "NEURAL_SPAM" = {
+                weight = 3.0;
+                description = "Neural network spam";
+              }
+              "NEURAL_HAM" = {
+                weight = -3.0;
+                description = "Neural network ham";
+              }
+            }
+          '';
+
+          "dmark.conf".text = ''
+            dmarc = {
+              servers = "redis";
+              password = "${cfg.redis.password}";
+            }
+          '';
+
+          "mx_check.conf".text = ''
+            enabled = true;
+
+            servers = "redis";
+            password = "${cfg.redis.password}";
+
+            timeout = 10.0;
+
+            exclude_domains = [
+              "https://maps.rspamd.com/freemail/disposable.txt.zst",
+              "https://maps.rspamd.com/freemail/free.txt.zst",
+            ];
+          '';
+
+          "reputation.conf".text = ''
+            rules {
+              ip_reputation = {
+                selector "ip" {
+                }
+                backend "redis" {
+                  servers = "redis";
+                  password = "${cfg.redis.password}";
+                }
+
+                symbol = "IP_REPUTATION";
+              }
+              spf_reputation =  {
+                selector "spf" {
+                }
+                backend "redis" {
+                  servers = "redis";
+                  password = "${cfg.redis.password}";
+                }
+
+                symbol = "SPF_REPUTATION";
+              }
+              dkim_reputation =  {
+                selector "dkim" {
+                }
+                backend "redis" {
+                  servers = "redis";
+                  password = "${cfg.redis.password}";
+                }
+
+                symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
+              }
+              generic_reputation =  {
+                selector "generic" {
+                  selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
+                }
+                backend "redis" {
+                  servers = "redis";
+                  password = "${cfg.redis.password}";
+                }
+
+                symbol = "GENERIC_REPUTATION";
+              }
+            }
+          '';
+
+          "rbl.conf".text = ''
+            surbl {
+              rules {
+                "SURBL_MULTI" {
+                  ignore_defaults = true; # for compatibility with old defaults
+                  rbl = "multi.surbl.org";
+                  checks = ['emails', 'dkim', 'urls'];
+                  emails_domainonly = true;
+                  urls = true;
+
+                  returnbits = {
+                    CRACKED_SURBL = 128; # From February 2016
+                    ABUSE_SURBL = 64;
+                    MW_SURBL_MULTI = 16;
+                    PH_SURBL_MULTI = 8;
+                    SURBL_BLOCKED = 1;
+                  }
+                          }
+
+                "URIBL_MULTI" {
+                  ignore_defaults = true; # for compatibility with old defaults
+                  rbl = "multi.uribl.com";
+                  checks = ['emails', 'dkim', 'urls'];
+                  emails_domainonly = true;
+
+                  returnbits = {
+                    URIBL_BLOCKED = 1;
+                    URIBL_BLACK = 2;
+                    URIBL_GREY = 4;
+                    URIBL_RED = 8;
+                  }
+                }
+
+                "RSPAMD_URIBL" {
+                  ignore_defaults = true; # for compatibility with old defaults
+                  rbl = "uribl.rspamd.com";
+                  checks = ['emails', 'dkim', 'urls'];
+                  # Also check images
+                  images = true;
+                  # Check emails for URLs
+                  emails_domainonly = true;
+                  # Hashed BL
+                  hash = 'blake2';
+                  hash_len = 32;
+                  hash_format = 'base32';
+
+                  returncodes = {
+                    RSPAMD_URIBL = [
+                      "127.0.0.2",
+                    ];
+                  }
+                }
+
+                "DBL" {
+                  ignore_defaults = true; # for compatibility with old defaults
+                  rbl = "dbl.spamhaus.org";
+                  no_ip = true;
+                  checks = ['emails', 'dkim', 'urls'];
+                  emails_domainonly = true;
+
+                  returncodes = {
+                    # spam domain
+                    DBL_SPAM = "127.0.1.2";
+                    # phish domain
+                    DBL_PHISH = "127.0.1.4";
+                    # malware domain
+                    DBL_MALWARE = "127.0.1.5";
+                    # botnet C&C domain
+                    DBL_BOTNET = "127.0.1.6";
+                    # abused legit spam
+                    DBL_ABUSE = "127.0.1.102";
+                    # abused spammed redirector domain
+                    DBL_ABUSE_REDIR = "127.0.1.103";
+                    # abused legit phish
+                    DBL_ABUSE_PHISH = "127.0.1.104";
+                    # abused legit malware
+                    DBL_ABUSE_MALWARE = "127.0.1.105";
+                    # abused legit botnet C&C
+                    DBL_ABUSE_BOTNET = "127.0.1.106";
+                    # error - IP queries prohibited!
+                    DBL_PROHIBIT = "127.0.1.255";
+                    # issue #3074
+                    DBL_BLOCKED_OPENRESOLVER = "127.255.255.254";
+                    DBL_BLOCKED = "127.255.255.255";
+                  }
+                }
+
+                "SEM_URIBL_UNKNOWN" {
+                  ignore_defaults = true; # for compatibility with old defaults
+                  rbl = "uribl.spameatingmonkey.net";
+                  no_ip = true;
+                  checks = ['emails', 'dkim', 'urls'];
+                  emails_domainonly = true;
+                  returnbits {
+                    SEM_URIBL = 2;
+                  }
+                }
+              }
             }
           '';
         };
 
-        controller = {
-          type = "controller";
-          count = 4;
-          bindSockets = [ "*:${toString cfg.ports.controller}" ];
-          includes = [ ];
+        overrides."milter_headers.conf".text = "extended_spam_headers = true;";
+
+        workers = {
+          rspamd_proxy = {
+            type = "rspamd_proxy";
+            bindSockets = [ "*:${toString cfg.ports.milter}" ];
+            count = 4;
+            extraConfig = ''
+              milter = yes;
+              timeout = 120s;
+
+              upstream "local" {
+                default = yes;
+                self_scan = yes;
+              }
+            '';
+          };
+
+          controller = {
+            type = "controller";
+            count = 4;
+            bindSockets = [ "*:${toString cfg.ports.controller}" ];
+            includes = [ ];
+          };
         };
       };
     };

@@ -412,11 +412,6 @@ in {
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall = {
-                  enable = true;
-                  allowedTCPPorts = [ metricsPort antispamPort ];
-                  allowedUDPPorts = [ antispamPort ];
-                };
                 fudo.mail.rspamd = {
                   enable = true;
                   ports = {

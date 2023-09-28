@@ -35,6 +35,12 @@ in {
       };
     };
 
+    networking.firewall = {
+      enable = true;
+      allowedTCPPorts = [ cfg.port ];
+      allowedUDPPorts = [ cfg.port ];
+    };
+
     systemd.tmpfiles.rules =
       [ "d ${cfg.state-directory} 0750 clamav clamav - -" ];
 
