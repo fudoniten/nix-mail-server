@@ -452,7 +452,7 @@ in {
           smtpd_sasl_type = "dovecot";
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
-          smtpd_sasl_local_domain = cfg.domain;
+          smtpd_sasl_local_domain = cfg.sasl-domain;
           smtpd_helo_restrictions =
             makeRestrictionsString outgoing-helo-restrictions;
           smtpd_client_restrictions =
@@ -472,7 +472,7 @@ in {
           smtpd_sasl_type = "dovecot";
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
-          smtpd_sasl_local_domain = cfg.domain;
+          smtpd_sasl_local_domain = cfg.sasl-domain;
           smtpd_helo_restrictions =
             makeRestrictionsString outgoing-helo-restrictions;
           smtpd_client_restrictions =

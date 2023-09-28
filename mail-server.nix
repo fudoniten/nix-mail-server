@@ -412,6 +412,11 @@ in {
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall = {
+                  enabled = true;
+                  allowedTCPPorts = [ metricsPort antispamPort ];
+                  allowedUDPPorts = [ antispamPort ];
+                };
                 fudo.mail.rspamd = {
                   enable = true;
                   ports = {
@@ -443,10 +448,15 @@ in {
                 imports = [ ./clamav.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall = {
+                  enabled = true;
+                  allowedTCPPorts = [ antivirusPort ];
+                  allowedUDPPorts = [ antivirusPort ];
+                };
                 fudo.mail.clamav = {
                   enable = true;
                   state-directory = "/state";
-                  port = antispamPort;
+                  port = antivirusPort;
                 };
               };
             };
