@@ -117,6 +117,7 @@ in {
               (ensureAllDkimCerts cfg.state-directory cfg.domains))
           ];
           ReadWritePaths = [ cfg.state-directory ];
+          ReadOnlyPaths = [ (dirOf keyTable) (dirOf signingTable) ];
         };
       };
     };
