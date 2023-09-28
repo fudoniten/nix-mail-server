@@ -32,6 +32,9 @@ let
     pkgs.writeText "opendkim-signing-table"
     (concatStringsSep "\n" (map (dom: "${dom} ${dom}") domains));
 
+  keyTable = makeKeyTable cfg.state-directory cfg.domains;
+  signingTable = makeSigningTable cfg.domains;
+
 in {
   options.fudo.mail.dkim = with types; {
     enable = mkEnableOption "Enable DKIM signature verification.";
@@ -93,8 +96,6 @@ in {
           SyslogSuccess yes
           LogWhy yes
         '';
-        keyTable = makeKeyTable cfg.state-directory cfg.domains;
-        signingTable = makeSigningTable cfg.domains;
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
         Socket inet:${toString cfg.port}
