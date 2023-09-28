@@ -10,13 +10,14 @@ let
       dkimTxt = "${keyDir}/${domain}.mail.txt";
     in ''
       if [ ! -f "${dkimKey}" ] || [ ! -f ${dkimTxt} ]; then
+        OUT=$(${pkgs.coreutils}/bin/mktemp -d -t dkim-XXXXXXXXXX)
         opendkim-genkey \
-          -s mail \
-          -d ${domain} \
+          --selector=mail \
+          --domain=${domain} \
           --bits="${toString cfg.key-bits}" \
-          --directory=$TMPDIR
-        mv $TMPDIR/mail.private ${dkimKey}
-        mv $TMPDIR/mail.txt ${dkimTxt}
+          --directory=$OUT
+        mv $OUT/mail.private ${dkimKey}
+        mv $OUT/mail.txt ${dkimTxt}
       fi
     '';
 
