@@ -25,11 +25,11 @@ let
     concatStringsSep "\n" (map (ensureDomainDkimCert keyDir) domains);
 
   makeKeyTable = keyDir: domains:
-    pkgs.writeTextDir "key.table" (concatStringsSep "\n"
+    pkgs.writeTextDir "dkim-tables/key.table" (concatStringsSep "\n"
       (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key") domains));
 
   makeSigningTable = domains:
-    pkgs.writeText "signing.table"
+    pkgs.writeText "dkim-tables/signing.table"
     (concatStringsSep "\n" (map (dom: "${dom} ${dom}") domains));
 
   keyTable = makeKeyTable cfg.state-directory cfg.domains;
