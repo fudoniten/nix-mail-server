@@ -279,7 +279,7 @@ in {
           cfg.blacklist.dns) ++ [ "permit" ];
 
         makeRestrictionsString = lst:
-          concatStringsSep "," (map (line: replaceStrings [ " " ] [ "," ])) lst;
+          concatStringsSep "," (map (line: replaceStrings [ " " ] [ "," ]) lst);
 
       in {
         enable = true;
