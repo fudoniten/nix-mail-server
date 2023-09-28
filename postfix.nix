@@ -270,13 +270,20 @@ in {
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
-        helo-restrictions = [
+        incoming-helo-restrictions = [
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
           "reject_unknown_helo_hostname"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
+
+        outgoing-helo-restrictions = [
+          "permit_mynetworks"
+          "reject_invalid_hostname"
+          "reject_unknown_helo_hostname"
+          "permit"
+        ];
 
         makeRestrictionsString = lst:
           concatStringsSep "," (map (replaceStrings [ " " ] [ "," ]) lst);
@@ -397,7 +404,7 @@ in {
 
           smtpd_recipient_restrictions = recipient-restrictions;
 
-          smtpd_helo_restrictions = helo-restrictions;
+          smtpd_helo_restrictions = incoming-helo-restrictions;
 
           # Handled by submission
           smtpd_tls_security_level = "may";
@@ -446,7 +453,8 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_helo_restrictions = makeRestrictionsString helo-restrictions;
+          smtpd_helo_restrictions =
+            makeRestrictionsString outgoing-helo-restrictions;
           smtpd_client_restrictions =
             makeRestrictionsString client-restrictions;
           smtpd_sender_restrictions =
@@ -465,7 +473,8 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_helo_restrictions = makeRestrictionsString helo-restrictions;
+          smtpd_helo_restrictions =
+            makeRestrictionsString outgoing-helo-restrictions;
           smtpd_client_restrictions =
             makeRestrictionsString client-restrictions;
           smtpd_sender_restrictions =
