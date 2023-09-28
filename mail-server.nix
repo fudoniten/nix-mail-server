@@ -413,7 +413,7 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall = {
-                  enabled = true;
+                  enable = true;
                   allowedTCPPorts = [ metricsPort antispamPort ];
                   allowedUDPPorts = [ antispamPort ];
                 };
@@ -449,7 +449,7 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall = {
-                  enabled = true;
+                  enable = true;
                   allowedTCPPorts = [ antivirusPort ];
                   allowedUDPPorts = [ antivirusPort ];
                 };
