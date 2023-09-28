@@ -64,7 +64,6 @@ in {
             type = "clamav";
             log_clean = true;
             servers = "${cfg.antivirus.host}:${toString cfg.antivirus.port}";
-            password = "${cfg.redis.password}";
             scan_mime_parts = false; # scan mail as a whole unit, not parts. seems to be needed to work at all
           }
         '';
@@ -256,7 +255,7 @@ in {
       workers = {
         rspamd_proxy = {
           type = "rspamd_proxy";
-          bindSockets = [ "localhost:${toString cfg.ports.milter}" ];
+          bindSockets = [ "*:${toString cfg.ports.milter}" ];
           count = 4;
           extraConfig = ''
             milter = yes;
@@ -272,7 +271,7 @@ in {
         controller = {
           type = "controller";
           count = 4;
-          bindSockets = [ "localhost:${toString cfg.ports.controller}" ];
+          bindSockets = [ "*:${toString cfg.ports.controller}" ];
           includes = [ ];
         };
       };
