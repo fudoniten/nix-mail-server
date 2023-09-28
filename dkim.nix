@@ -29,7 +29,7 @@ let
       (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key") domains));
 
   makeSigningTable = domains:
-    pkgs.writeText "dkim-tables/signing.table"
+    pkgs.writeTextDir "dkim-tables/signing.table"
     (concatStringsSep "\n" (map (dom: "${dom} ${dom}") domains));
 
   keyTable = makeKeyTable cfg.state-directory cfg.domains;
