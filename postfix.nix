@@ -267,30 +267,6 @@ in {
           cfg.blacklist.dns)
           ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
 
-        submission-sender-restrictions = [
-          "check_sender_access,${mappedFile "reject_senders"}"
-          "reject_sender_login_mismatch"
-          "reject_non_fqdn_sender"
-          "reject_unknown_sender_domain"
-          "permit_mynetworks"
-          "permit_sasl_authenticated"
-        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ];
-
-        submission-recipient-restrictions = [
-          "reject_unknown_sender_domain"
-          "reject_unknown_recipient_domain"
-          "reject_unauth_pipelining"
-          "reject_unauth_destination"
-          "reject_invalid_hostname"
-          "reject_non_fqdn_hostname"
-          "reject_non_fqdn_sender"
-          "reject_non_fqdn_recipient"
-          "permit_mynetworks"
-          "permit_sasl_authenticated"
-          "reject"
-        ];
-
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
@@ -301,6 +277,9 @@ in {
           "reject_unknown_helo_hostname"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
+
+        makeRestrictionsString = lst:
+          concatStringsSep "," (map (line: replaceStrings [ " " ] [ "," ])) lst;
 
       in {
         enable = true;
@@ -458,8 +437,7 @@ in {
           tls_random_source = "dev:/dev/urandom";
         };
 
-        submissionOptions = let makeRestrictionsList = concatStringsSep ",";
-        in {
+        submissionOptions = {
           milter_macro_daemon_name = "ORIGINATING";
           smtpd_helo_required = "yes";
           smtpd_tls_security_level = "encrypt";
@@ -468,16 +446,17 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_helo_restrictions = makeRestrictionsList helo-restrictions;
-          smtpd_client_restrictions = makeRestrictionsList client-restrictions;
-          smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
+          smtpd_helo_restrictions = makeRestrictionsString helo-restrictions;
+          smtpd_client_restrictions =
+            makeRestrictionsString client-restrictions;
+          smtpd_sender_restrictions =
+            makeRestrictionsString sender-restrictions;
           smtpd_recipient_restrictions =
-            makeRestrictionsList submission-recipient-restrictions;
+            makeRestrictionsString recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
-        submissionsOptions = let makeRestrictionsList = concatStringsSep ",";
-        in {
+        submissionsOptions = {
           milter_macro_daemon_name = "ORIGINATING";
           smtpd_helo_required = "yes";
           smtpd_tls_security_level = "encrypt";
@@ -486,11 +465,13 @@ in {
           smtpd_sasl_path = "/run/dovecot2/auth";
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_local_domain = cfg.domain;
-          smtpd_helo_restrictions = makeRestrictionsList helo-restrictions;
-          smtpd_client_restrictions = makeRestrictionsList client-restrictions;
-          smtpd_sender_restrictions = makeRestrictionsList sender-restrictions;
+          smtpd_helo_restrictions = makeRestrictionsString helo-restrictions;
+          smtpd_client_restrictions =
+            makeRestrictionsString client-restrictions;
+          smtpd_sender_restrictions =
+            makeRestrictionsString sender-restrictions;
           smtpd_recipient_restrictions =
-            makeRestrictionsList submission-recipient-restrictions;
+            makeRestrictionsString recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
         };
 
