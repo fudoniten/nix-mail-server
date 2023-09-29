@@ -243,7 +243,7 @@ in {
             "dn = ${cfg.ldap.bind-dn}"
             "dnpass = ${readFile cfg.ldap.bind-password-file}"
             "auth_bind = yes"
-            "auth_bind_userdn = uid=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
+            "auth_bind_userdn = cn=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
           ]);
         target-file = "/run/dovecot-secret/ldap.conf";
