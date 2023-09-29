@@ -246,15 +246,15 @@ in {
           "reject_unauth_destination"
           "reject_unauth_pipelining"
           "reject_unknown_sender_domain"
-          "permit_mynetworks"
-          "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ];
+          cfg.blacklist.dns)
+          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
 
         recipient-restrictions = [
           "check_sender_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
+          "permit_sasl_authenticated"
           "reject_unauth_pipelining"
           "reject_unauth_destination"
           "reject_invalid_hostname"
@@ -263,8 +263,7 @@ in {
           "reject_non_fqdn_recipient"
           "check_policy_service unix:private/policy-spf"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns)
-          ++ [ "permit_mynetworks" "permit_sasl_authenticated" "reject" ];
+          cfg.blacklist.dns) ++ [ "permit_mynetworks" "reject" ];
 
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
