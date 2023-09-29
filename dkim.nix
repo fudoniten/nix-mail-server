@@ -25,15 +25,15 @@ let
     concatStringsSep "\n" (map (ensureDomainDkimCert keyDir) domains);
 
   makeKeyTable = keyDir: domains:
-    pkgs.writeTextDir "dkim-tables/key.table" (concatStringsSep "\n"
+    pkgs.writeTextDir "key.table" (concatStringsSep "\n"
       (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key") domains));
 
   makeSigningTable = domains:
-    pkgs.writeTextDir "dkim-tables/signing.table"
+    pkgs.writeTextDir "signing.table"
     (concatStringsSep "\n" (map (dom: "${dom} ${dom}") domains));
 
-  keyTable = makeKeyTable cfg.state-directory cfg.domains;
-  signingTable = makeSigningTable cfg.domains;
+  keyTableDir = makeKeyTable cfg.state-directory cfg.domains;
+  signingTableDir = makeSigningTable cfg.domains;
 
 in {
   options.fudo.mail.dkim = with types; {
@@ -99,8 +99,8 @@ in {
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
         Socket inet:${toString cfg.port}
-        KeyTable file: ${keyTable}
-        SigningTable file:${signingTable}
+        KeyTable file: ${keyTableDir}/key.table
+        SigningTable file:${signingTableDir}/signing.table
         ${optionalString cfg.debug debugString}
       '';
     };
@@ -118,7 +118,7 @@ in {
               (ensureAllDkimCerts cfg.state-directory cfg.domains))
           ];
           ReadWritePaths = [ cfg.state-directory ];
-          ReadOnlyPaths = [ (dirOf keyTable) (dirOf signingTable) ];
+          ReadOnlyPaths = [ keyTableDir signingTableDir ];
         };
       };
     };
