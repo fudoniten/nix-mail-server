@@ -30,7 +30,7 @@ let
     '') domains));
 
   makeSigningTable = domains:
-    pkgs.writeTextDir "signing.table" (concatStrings "\n" (map (dom: ''
+    pkgs.writeTextDir "signing.table" (concatStrings (map (dom: ''
       ${dom} ${dom}
     '') domains));
 
