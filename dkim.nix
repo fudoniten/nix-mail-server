@@ -26,7 +26,7 @@ let
 
   makeKeyTable = keyDir: domains:
     pkgs.writeTextDir "key.table" (concatStrings (map (dom: ''
-      ${dom}:mail:${keyDir}/${dom}.mail.key
+      ${dom} ${dom}:mail:${keyDir}/${dom}.mail.key
     '') domains));
 
   makeSigningTable = domains:
