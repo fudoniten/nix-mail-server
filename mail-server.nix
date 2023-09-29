@@ -344,7 +344,7 @@ in {
           };
           imap = {
             service = {
-              networks = [ "internal_network" ];
+              networks = [ "internal_network" "external_network" ];
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
