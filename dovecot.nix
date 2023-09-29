@@ -170,6 +170,7 @@ in {
         "${cfg.mail-user}" = {
           isSystemUser = true;
           group = cfg.mail-group;
+          uid = 5025;
         };
         "${cfg.metrics.user}" = {
           isSystemUser = true;
@@ -177,7 +178,10 @@ in {
         };
       };
       groups = {
-        "${cfg.mail-group}".members = [ cfg.mail-user ];
+        "${cfg.mail-group}" = {
+          members = [ cfg.mail-user ];
+          gid = 5025;
+        };
         "${cfg.metrics.group}".members = [ cfg.metrics.user ];
       };
     };
