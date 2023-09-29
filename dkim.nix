@@ -6,18 +6,18 @@ let
 
   ensureDomainDkimCert = keyDir: domain:
     let
-      dkimKey = "${keyDir}/${domain}.mail.key";
-      dkimTxt = "${keyDir}/${domain}.mail.txt";
+      dkimKey = "${keyDir}/${domain}.${cfg.selector}.key";
+      dkimTxt = "${keyDir}/${domain}.${cfg.selector}.txt";
     in ''
       if [ ! -f "${dkimKey}" ] || [ ! -f ${dkimTxt} ]; then
         OUT=$(${pkgs.coreutils}/bin/mktemp -d -t dkim-XXXXXXXXXX)
         opendkim-genkey \
-          --selector=mail \
+          --selector=${cfg.selector} \
           --domain=${domain} \
           --bits="${toString cfg.key-bits}" \
           --directory=$OUT
-        mv $OUT/mail.private ${dkimKey}
-        mv $OUT/mail.txt ${dkimTxt}
+        mv $OUT/${cfg.selector}.private ${dkimKey}
+        mv $OUT/${cfg.selector}.txt ${dkimTxt}
       fi
     '';
 
@@ -26,7 +26,7 @@ let
 
   makeKeyTable = keyDir: domains:
     pkgs.writeTextDir "key.table" (concatStrings (map (dom: ''
-      ${dom} ${dom}:mail:${keyDir}/${dom}.mail.key
+      ${dom} ${dom}:${cfg.selector}:${keyDir}/${dom}.${cfg.selector}.key
     '') domains));
 
   makeSigningTable = domains:
@@ -84,12 +84,11 @@ in {
     networking.firewall = {
       enable = true;
       allowedTCPPorts = [ cfg.port ];
-      allowedUDPPorts = [ cfg.port ];
     };
 
     services.opendkim = {
       enable = true;
-      selector = cfg.selector;
+      # selector = cfg.selector;
       domains = let domainString = concatStringsSep "," cfg.domains;
       in "csl:${domainString}";
       configFile = let
