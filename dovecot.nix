@@ -187,7 +187,7 @@ in {
     };
 
     # FIXME: TEMPORARY FOR TESTING
-    environment.systemPackages = [ openldap ];
+    environment.systemPackages = with pkgs; [ openldap ];
 
     systemd = {
       tmpfiles.rules = [
