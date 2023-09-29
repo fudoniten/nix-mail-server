@@ -88,7 +88,7 @@ in {
 
     services.opendkim = {
       enable = true;
-      # selector = cfg.selector;
+      selector = cfg.selector;
       domains = let domainString = concatStringsSep "," cfg.domains;
       in "csl:${domainString}";
       configFile = let
@@ -100,8 +100,8 @@ in {
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
         Socket inet:${toString cfg.port}
-        KeyTable file:${keyTableDir}/key.table
-        SigningTable file:${signingTableDir}/signing.table
+        # KeyTable file:${keyTableDir}/key.table
+        # SigningTable file:${signingTableDir}/signing.table
         ${optionalString cfg.debug debugString}
       '';
     };
@@ -114,10 +114,10 @@ in {
       services.opendkim = {
         path = with pkgs; [ opendkim ];
         serviceConfig = {
-          ExecStartPre = [
-            (pkgs.writeShellScript "ensure-dkim-certs.sh"
-              (ensureAllDkimCerts cfg.state-directory cfg.domains))
-          ];
+          # ExecStartPre = [
+          #   (pkgs.writeShellScript "ensure-dkim-certs.sh"
+          #     (ensureAllDkimCerts cfg.state-directory cfg.domains))
+          # ];
           ReadWritePaths = [ cfg.state-directory ];
           ReadOnlyPaths = [ keyTableDir signingTableDir ];
         };
