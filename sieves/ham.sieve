@@ -9,7 +9,7 @@ if string "${mailbox}" "Trash" {
 }
 
 if string "${mailbox}" "Junk" {
-  stop
+  stop;
 }
 
 if environment :matches "imap.user" "*" {

@@ -186,43 +186,50 @@ in {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0751 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/mail   0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} - - -"
+        "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
       ];
 
-      services.dovecot-sieve-generator = let
-        isRegularFile = _: type: type == "regular";
-        sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
-        headOrNull = lst: if lst == [ ] then null else head lst;
-        stripExt = ext: filename:
-          headOrNull (builtins.match "(.+)[.]${ext}$" filename);
-        compileFile = filename: _:
-          let
-            filePath = ./sieves + "/${filename}";
-            fileBaseName = stripExt "sieve" filename;
-          in ''
-            cp ${filePath} ${sieveDirectory}/${fileBaseName}.sieve
-            sievec ${sieveDirectory}/${fileBaseName}.sieve ${sieveDirectory}/${fileBaseName}.svbin
-          '';
-      in {
-        wantedBy = [ "dovecot2.service" ];
-        before = [ "dovecot2.service" ];
-        path = with pkgs; [ dovecot_pigeonhole ];
-        serviceConfig = {
-          User = config.services.dovecot2.user;
-          ReadWritePaths = [ sieveDirectory ];
-          ExecStart = pkgs.writeShellScript "generate-sieves.sh"
-            (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
-          PrivateDevices = true;
-          PrivateTmp = true;
-          PrivateMounts = true;
-          ProtectControlGroups = true;
-          ProtectKernelTunables = true;
-          ProtectKernelModules = true;
-          ProtectSystem = true;
-          ProtectHome = true;
-          ProtectClock = true;
-          ProtectKernelLogs = true;
-          Type = "oneshot";
+      services = {
+        prometheus-dovecot-exporter = {
+          requires = [ "dovecot2.service" ];
+          after = [ "dovecot2.service" ];
+        };
+
+        dovecot-sieve-generator = let
+          isRegularFile = _: type: type == "regular";
+          sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
+          headOrNull = lst: if lst == [ ] then null else head lst;
+          stripExt = ext: filename:
+            headOrNull (builtins.match "(.+)[.]${ext}$" filename);
+          compileFile = filename: _:
+            let
+              filePath = ./sieves + "/${filename}";
+              fileBaseName = stripExt "sieve" filename;
+            in ''
+              cp ${filePath} ${sieveDirectory}/${fileBaseName}.sieve
+              sievec ${sieveDirectory}/${fileBaseName}.sieve ${sieveDirectory}/${fileBaseName}.svbin
+            '';
+        in {
+          wantedBy = [ "dovecot2.service" ];
+          after = [ "dovecot2.service" ];
+          path = with pkgs; [ dovecot_pigeonhole ];
+          serviceConfig = {
+            User = config.services.dovecot2.user;
+            ReadWritePaths = [ sieveDirectory "/run/dovecot2" ];
+            ExecStart = pkgs.writeShellScript "generate-sieves.sh"
+              (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
+            PrivateDevices = true;
+            PrivateTmp = true;
+            PrivateMounts = true;
+            ProtectControlGroups = true;
+            ProtectKernelTunables = true;
+            ProtectKernelModules = true;
+            ProtectSystem = true;
+            ProtectHome = true;
+            ProtectClock = true;
+            ProtectKernelLogs = true;
+            Type = "oneshot";
+          };
         };
       };
     };

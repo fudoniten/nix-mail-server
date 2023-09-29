@@ -244,7 +244,7 @@ in {
 
         relay-restrictions = [
           "reject_unauth_destination"
-          # "reject_unauth_pipelining"
+          "reject_unauth_pipelining"
           "reject_unknown_sender_domain"
           "permit_mynetworks"
           "permit_sasl_authenticated"
@@ -255,7 +255,7 @@ in {
           "check_sender_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
-          # "reject_unauth_pipelining"
+          "reject_unauth_pipelining"
           "reject_unauth_destination"
           "reject_invalid_hostname"
           "reject_non_fqdn_hostname"
