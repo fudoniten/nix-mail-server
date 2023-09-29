@@ -99,6 +99,7 @@ in {
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
         Socket inet:${toString cfg.port}
+        Selector mail
         KeyTable file:${keyTableDir}/key.table
         SigningTable file:${signingTableDir}/signing.table
         ${optionalString cfg.debug debugString}
