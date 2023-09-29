@@ -321,7 +321,7 @@ in {
           protocol imap {
             mail_max_userip_connections = ${toString cfg.max-user-connections}
             mail_plugins = $mail_plugins imap_sieve
-          }n
+          }
 
           protocol lmtp {
             mail_plugins = $mail_plugins sieve
