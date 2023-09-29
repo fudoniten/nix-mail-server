@@ -42,6 +42,7 @@ in {
     services.opendkim = {
       enable = true;
       selector = cfg.selector;
+      socket = "niten:${toString cfg.port}";
       domains = let domainString = concatStringsSep "," cfg.domains;
       in "csl:${domainString}";
       configFile = let
@@ -52,7 +53,6 @@ in {
         '';
       in pkgs.writeText "opendkim.conf" ''
         Canonicalization relaxed/simple
-        Socket inet:${toString cfg.port}
         ${optionalString cfg.debug debugString}
       '';
     };
