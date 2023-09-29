@@ -459,7 +459,7 @@ in {
           dkim = {
             service = {
               networks = [ "internal_network" ];
-              volumes = [ "${cfg.state-directory}/dkim:/state" ];
+              volumes = [ "${cfg.state-directory}/dkim:/var/lib/opendkim" ];
             };
             nixos = {
               useSystemd = true;
