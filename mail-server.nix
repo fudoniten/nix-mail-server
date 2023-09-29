@@ -114,16 +114,16 @@ in {
         description = "Token with which to authenticate to the Authentik host.";
       };
 
-      # bind-dn = mkOption {
-      #   type = str;
-      #   description = "DN as which to bind with the LDAP server.";
-      # };
+      bind-dn = mkOption {
+        type = str;
+        description = "DN as which to bind with the LDAP server.";
+      };
 
-      # bind-password-file = mkOption {
-      #   type = str;
-      #   description =
-      #     "File containing password with which to bind with the LDAP server.";
-      # };
+      bind-password-file = mkOption {
+        type = str;
+        description =
+          "File containing password with which to bind with the LDAP server.";
+      };
 
       base = mkOption {
         type = str;
@@ -240,8 +240,8 @@ in {
           (concatStringsSep "\n" [
             "uris = ldap://ldap-proxy:3389"
             "ldap_version = 3"
-            # "dn = ${cfg.ldap.bind-dn}"
-            # "dnpass = ${readFile cfg.ldap.bind-password-file}"
+            "dn = ${cfg.ldap.bind-dn}"
+            "dnpass = ${readFile cfg.ldap.bind-password-file}"
             "auth_bind = yes"
             "auth_bind_userdn = uid=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
