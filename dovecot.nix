@@ -186,6 +186,9 @@ in {
       };
     };
 
+    # FIXME: TEMPORARY FOR TESTING
+    environment.systemPackages = [ openldap ];
+
     systemd = {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0751 ${cfg.mail-user} ${cfg.mail-group} - -"
