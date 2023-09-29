@@ -42,7 +42,7 @@ in {
     services.opendkim = {
       enable = true;
       selector = cfg.selector;
-      socket = "niten:${toString cfg.port}";
+      socket = "inet:${toString cfg.port}";
       domains = let domainString = concatStringsSep "," cfg.domains;
       in "csl:${domainString}";
       configFile = let
