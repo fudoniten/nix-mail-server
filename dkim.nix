@@ -25,12 +25,14 @@ let
     concatStringsSep "\n" (map (ensureDomainDkimCert keyDir) domains);
 
   makeKeyTable = keyDir: domains:
-    pkgs.writeTextDir "key.table" (concatStringsSep "\n"
-      (map (dom: "${dom}:mail:${keyDir}/${dom}.mail.key") domains));
+    pkgs.writeTextDir "key.table" (concatStrings (map (dom: ''
+      ${dom}:mail:${keyDir}/${dom}.mail.key
+    '') domains));
 
   makeSigningTable = domains:
-    pkgs.writeTextDir "signing.table"
-    (concatStringsSep "\n" (map (dom: "${dom} ${dom}") domains));
+    pkgs.writeTextDir "signing.table" (concatStrings "\n" (map (dom: ''
+      ${dom} ${dom}
+    '') domains));
 
   keyTableDir = makeKeyTable cfg.state-directory cfg.domains;
   signingTableDir = makeSigningTable cfg.domains;
