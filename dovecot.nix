@@ -210,8 +210,12 @@ in {
               filePath = ./sieves + "/${filename}";
               fileBaseName = stripExt "sieve" filename;
             in ''
-              cp ${filePath} ${sieveDirectory}/${fileBaseName}.sieve
-              sievec ${sieveDirectory}/${fileBaseName}.sieve ${sieveDirectory}/${fileBaseName}.svbin
+              if [ -f "${sieveDirectory}/${fileBaseName}.sieve" ]; then
+                rm "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
+              fi
+              cp ${filePath} "${sieveDirectory}/${fileBaseName}.sieve"
+              sievec "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
+              chmod u+w "${sieveDirectory}/${fileBaseName}.sieve"
             '';
         in {
           wantedBy = [ "dovecot2.service" ];
@@ -313,7 +317,7 @@ in {
           protocol imap {
             mail_max_userip_connections = ${toString cfg.max-user-connections}
             mail_plugins = $mail_plugins imap_sieve
-          }
+          }n
 
           protocol lmtp {
             mail_plugins = $mail_plugins sieve
