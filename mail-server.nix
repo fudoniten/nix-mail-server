@@ -187,42 +187,6 @@ in {
           };
         };
       };
-
-      ## No...these ports were already open
-      # xinetd = {
-      #   enable = true;
-      #   services = let
-      #     genService = { name, port, protocols ? [ "tcp" ] }:
-      #       map (protocol: {
-      #         inherit name;
-      #         server = "/usr/bin/env";
-      #         extraConfig = "redirect = 127.0.0.1 ${toString port}";
-      #       }) protocols;
-      #   in concatMap genService [
-      #     {
-      #       name = "imap";
-      #       port = 9143;
-      #     }
-      #     {
-      #       name = "imaps";
-      #       port = 9993;
-      #     }
-      #     {
-      #       name = "smtp";
-      #       port = 9025;
-      #       protocols = [ "tcp" "udp" ];
-      #     }
-      #     {
-      #       name = "submission";
-      #       port = 9587;
-      #       protocols = [ "tcp" "udp" ];
-      #     }
-      #     {
-      #       name = "submissions";
-      #       port = 9465;
-      #     }
-      #   ];
-      # };
     };
 
     fudo.secrets.host-secrets."${hostname}" = {
