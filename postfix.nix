@@ -251,7 +251,7 @@ in {
           ++ [ "permit_mynetworks" "reject_unauth_destination" "reject" ];
 
         recipient-restrictions = [
-          "check_sender_access ${mappedFile "reject_recipients"}"
+          "check_recipient_access ${mappedFile "reject_recipients"}"
           "reject_unknown_sender_domain"
           "reject_unknown_recipient_domain"
           "permit_sasl_authenticated"
