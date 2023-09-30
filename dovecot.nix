@@ -360,8 +360,11 @@ in {
             args = uid=${
               toString mailUserUid
             } home=${cfg.state-directory}/mail/%u
-            user_attrs = =user=%{ldap:cn}
-            user_filter = (&(objectClass=organizationalPerson)(cn=%n))
+          }
+
+          userdb {
+            driver = ldap
+            args = ${cfg.ldap-conf}
           }
 
           service imap {
