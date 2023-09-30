@@ -245,6 +245,7 @@ in {
             "auth_bind = yes"
             "auth_bind_userdn = cn=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
+            "user_attrs = =user=%{ldap:cn}"
           ]);
         target-file = "/run/dovecot-secret/ldap.conf";
       };

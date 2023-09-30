@@ -200,8 +200,6 @@ in {
 
           auth_mechanisms = login plain
 
-          user_attrs = =user=%{ldap:cn}
-
           passdb {
             driver = ldap
             args = ${cfg.ldap-conf}
