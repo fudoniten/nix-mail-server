@@ -211,7 +211,7 @@ in {
             "base = ${cfg.ldap.base}"
             "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
             "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_attrs = =user=%{ldap:cn}"
+            "pass_attrs = cn=user"
           ]);
         target-file = "/run/dovecot-secret/ldap.conf";
       };
