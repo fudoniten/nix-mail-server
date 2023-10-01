@@ -357,7 +357,6 @@ in {
           passdb {
             driver = ldap
             args = ${cfg.ldap-conf}
-            pass_attrs = cn=user
           }
 
           # All users map to one actual system user

@@ -155,6 +155,7 @@ in {
             }
           '';
 
+          # SURBL checks URLs in emails against known-bad urls
           "rbl.conf".text = ''
             surbl {
               rules {
@@ -172,7 +173,7 @@ in {
                     PH_SURBL_MULTI = 8;
                     SURBL_BLOCKED = 1;
                   }
-                          }
+                }
 
                 "URIBL_MULTI" {
                   ignore_defaults = true; # for compatibility with old defaults
