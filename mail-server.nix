@@ -207,9 +207,10 @@ in {
             "dn = ${cfg.ldap.bind-dn}"
             "dnpass = ${readFile cfg.ldap.bind-password-file}"
             "auth_bind = yes"
-            "auth_bind_userdn = cn=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
+            "auth_bind_userdn = cn=%n,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
             "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
+            "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
           ]);
         target-file = "/run/dovecot-secret/ldap.conf";
       };
@@ -220,6 +221,7 @@ in {
       "d ${cfg.state-directory}/dovecot-dhparams   0700 - - - -"
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
+      "d ${cfg.state-directory}/mail               0700 - - - -"
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
@@ -316,6 +318,7 @@ in {
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
+                "${cfg.state-directory}/mail:/mail"
               ];
               depends_on = [ "antispam" "ldap-proxy" ];
             };
@@ -329,6 +332,7 @@ in {
                   enable = true;
                   debug = cfg.debug;
                   state-directory = "/state";
+                  mail-directory = "/mail";
                   ports = {
                     lmtp = lmtpPort;
                     auth = authPort;

@@ -17,6 +17,11 @@ in {
       description = "Directory at which to store server state.";
     };
 
+    mail-directory = mkOption {
+      type = str;
+      description = "Directory at which to store user email.";
+    };
+
     ports = {
       lmtp = mkOption {
         type = port;
@@ -192,7 +197,7 @@ in {
     systemd = {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0751 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/mail   0750 ${cfg.mail-user} ${cfg.mail-group} - -"
+        "d ${cfg.mail-directory}         0750 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
       ];
 
@@ -263,7 +268,7 @@ in {
 
         mailUser = cfg.mail-user;
         mailGroup = cfg.mail-group;
-        mailLocation = "maildir:${cfg.state-directory}/mail/%u/";
+        mailLocation = "maildir:${cfg.mail-directory}/%u/";
         createMailUser = false;
 
         sslServerCert = cfg.ssl.certificate;
@@ -357,9 +362,7 @@ in {
           # All users map to one actual system user
           userdb {
             driver = static
-            args = uid=${
-              toString mailUserUid
-            } home=${cfg.state-directory}/mail/%u
+            args = uid=${toString mailUserUid} home=${cfg.mail-directory}/%u
           }
 
           service imap {
