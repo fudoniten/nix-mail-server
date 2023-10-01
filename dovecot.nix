@@ -356,6 +356,7 @@ in {
 
           passdb {
             driver = ldap
+            user_format = %n
             args = ${cfg.ldap-conf}
           }
 
