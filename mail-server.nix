@@ -225,7 +225,7 @@ in {
             "dn = ${cfg.ldap.bind-dn}"
             "dnpass = ${readFile cfg.ldap.bind-password-file}"
             "auth_bind = yes"
-            "auth_bind_userdn = cn=%n,${cfg.ldap.member-ou},${cfg.ldap.base}"
+            "auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
             "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
             "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
