@@ -210,7 +210,6 @@ in {
             "auth_bind_userdn = cn=%u,${cfg.ldap.member-ou},${cfg.ldap.base}"
             "base = ${cfg.ldap.base}"
             "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
           ]);
         target-file = "/run/dovecot-secret/ldap.conf";
       };

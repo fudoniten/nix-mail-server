@@ -205,11 +205,6 @@ in {
             args = ${cfg.ldap-conf}
           }
 
-          userdb {
-            driver = ldap
-            args = ${cfg.ldap-conf}
-          }
-
           service auth {
             unix_listener auth {
               mode = 0600

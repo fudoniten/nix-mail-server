@@ -362,11 +362,6 @@ in {
             } home=${cfg.state-directory}/mail/%u
           }
 
-          userdb {
-            driver = ldap
-            args = ${cfg.ldap-conf}
-          }
-
           service imap {
             vsz_limit = 1024M
           }
