@@ -207,48 +207,6 @@ in {
           after = [ "dovecot2.service" ];
         };
 
-        sssd = {
-          enable = true;
-          environmentFile = "/run/dovecotSecrets/sssd.env";
-          config = ''
-            [nss]
-            filter_users = root
-            filter_groups = root
-            reconnection_retries = 3
-
-            [sssd]
-            config_file_version = 2
-            reconnection_retries = 3
-            sbus_timeout = 30
-            domains = informis.land
-            services = nss, pam
-
-            [pam]
-            reconnection_retries = 3
-
-            [domain/informis.land]
-            cache_credentials = False
-            id_provider = ldap
-            auth_provider = ldap
-            access_provider = ldap
-            chpass_provider = ldap
-            ldap_uri = SSSD_LDAP_SERVER
-
-            ldap_schema = rfc2307bis
-            ldap_search_base = SSSD_LDAP_SEARCH_BASE
-            ldap_user_search_base = SSSD_LDAP_USER_SEARCH_BASE
-            ldap_group_search_base = SSSD_LDAP_GROUP_SEARCH_BASE
-
-            ldap_user_object_class = user
-            ldap_user_name = cn
-            ldap_group_object_class = group
-            ldap_group_name = cn
-
-            ldap_default_bind_fn = SSSD_LDAP_BIND_DN
-            ldap_default_authtok = SSSD_LDAP_AUTH_TOKEN
-          '';
-        };
-
         dovecot-sieve-generator = let
           isRegularFile = _: type: type == "regular";
           sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
@@ -300,6 +258,48 @@ in {
         listenAddress = "127.0.0.1";
         port = cfg.ports.metrics;
         socketPath = "/var/run/dovecot2/old-stats";
+      };
+
+      sssd = {
+        enable = true;
+        environmentFile = "/run/dovecotSecrets/sssd.env";
+        config = ''
+          [nss]
+          filter_users = root
+          filter_groups = root
+          reconnection_retries = 3
+
+          [sssd]
+          config_file_version = 2
+          reconnection_retries = 3
+          sbus_timeout = 30
+          domains = informis.land
+          services = nss, pam
+
+          [pam]
+          reconnection_retries = 3
+
+          [domain/informis.land]
+          cache_credentials = False
+          id_provider = ldap
+          auth_provider = ldap
+          access_provider = ldap
+          chpass_provider = ldap
+          ldap_uri = SSSD_LDAP_SERVER
+
+          ldap_schema = rfc2307bis
+          ldap_search_base = SSSD_LDAP_SEARCH_BASE
+          ldap_user_search_base = SSSD_LDAP_USER_SEARCH_BASE
+          ldap_group_search_base = SSSD_LDAP_GROUP_SEARCH_BASE
+
+          ldap_user_object_class = user
+          ldap_user_name = cn
+          ldap_group_object_class = group
+          ldap_group_name = cn
+
+          ldap_default_bind_fn = SSSD_LDAP_BIND_DN
+          ldap_default_authtok = SSSD_LDAP_AUTH_TOKEN
+        '';
       };
 
       dovecot2 = {
