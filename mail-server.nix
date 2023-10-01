@@ -131,10 +131,16 @@ in {
         example = "dc=fudo,dc=org";
       };
 
-      member-ou = mkOption {
+      user-ou = mkOption {
         type = str;
         description = "Organizational unit containing users.";
-        default = "ou=members";
+        default = "ou=users";
+      };
+
+      group-ou = mkOption {
+        type = str;
+        description = "Organizational unit containing users.";
+        default = "ou=groups";
       };
     };
 
