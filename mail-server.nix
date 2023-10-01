@@ -333,7 +333,7 @@ in {
                 "${cfg.imap.ssl-directory}:/run/certs/imap"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
-                "${hostSecrets.dovecotSssdEnv}:/run/dovecot-secrets/sssd.env"
+                "${hostSecrets.dovecotSssdEnv.target-file}:/run/dovecot-secrets/sssd.env"
               ];
               depends_on = [ "antispam" "ldap-proxy" ];
             };
