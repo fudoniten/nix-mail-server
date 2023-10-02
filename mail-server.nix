@@ -337,10 +337,10 @@ in {
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${cfg.imap.ssl-directory}:/run/certs/imap"
+                "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
-                "${hostSecrets.dovecotSssdEnv.target-file}:/run/dovecot-secrets/sssd.env"
+                "${hostSecrets.dovecotSssdEnv.target-file}:/run/dovecot-secrets/sssd.env:ro"
               ];
               depends_on = [ "antispam" "ldap-proxy" ];
             };
