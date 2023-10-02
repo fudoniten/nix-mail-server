@@ -273,7 +273,6 @@ in {
           [sssd]
           config_file_version = 2
           reconnection_retries = 3
-          sbus_timeout = 30
           domains = informis.land
           services = nss, pam
 
@@ -298,7 +297,7 @@ in {
           ldap_group_object_class = group
           ldap_group_name = cn
 
-          ldap_default_bind_fn = SSSD_LDAP_BIND_DN
+          ldap_default_bind_dn = SSSD_LDAP_BIND_DN
           ldap_default_authtok = SSSD_LDAP_AUTH_TOKEN
         '';
       };
