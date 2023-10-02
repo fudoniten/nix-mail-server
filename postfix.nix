@@ -263,7 +263,8 @@ in {
           "reject_non_fqdn_recipient"
           "check_policy_service unix:private/policy-spf"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit_mynetworks" "reject" ];
+          cfg.blacklist.dns)
+          ++ [ "permit_mynetworks" "reject_unauth_destination" ];
 
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];

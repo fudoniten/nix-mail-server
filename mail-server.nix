@@ -205,19 +205,6 @@ in {
         target-file = "/run/ldap-proxy/env";
       };
 
-      dovecotSssdEnv = {
-        source-file = pkgs.writeText "dovecot-sssd.env" (concatStringsSep "\n" [
-          "SSSD_LDAP_DOMAIN=${cfg.primary-domain}"
-          "SSSD_LDAP_SERVER=ldap://ldap-proxy:3389/"
-          "SSSD_LDAP_SEARCH_BASE=${cfg.ldap.base}"
-          "SSSD_LDAP_USER_SEARCH_BASE=${cfg.ldap.user-ou},${cfg.ldap.base}"
-          "SSSD_LDAP_GROUP_SEARCH_BASE=${cfg.ldap.group-ou},${cfg.ldap.base}"
-          "SSSD_LDAP_BIND_DN=${cfg.ldap.bind-dn}"
-          "SSSD_LDAP_AUTH_TOKEN=${readFile cfg.ldap.bind-password-file}"
-        ]);
-        target-file = "/run/dovecot-secrets/sssd.env";
-      };
-
       dovecotLdapConfig = {
         source-file = pkgs.writeText "dovecot-ldap.conf"
           (concatStringsSep "\n" [
@@ -343,7 +330,6 @@ in {
                 "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
-                "${hostSecrets.dovecotSssdEnv.target-file}:/run/dovecot-secrets/sssd.env:ro"
               ];
               depends_on = [ "antispam" "ldap-proxy" ];
             };
