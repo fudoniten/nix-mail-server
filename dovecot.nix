@@ -263,7 +263,7 @@ in {
       sssd = {
         enable = true;
         # FIXME: pass as config
-        environmentFile = "/run/dovecot-secret/sssd.env";
+        environmentFile = "/run/dovecot-secrets/sssd.env";
         config = ''
           [nss]
           filter_users = root

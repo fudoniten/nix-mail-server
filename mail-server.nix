@@ -214,7 +214,7 @@ in {
           "SSSD_LDAP_BIND_DN=${cfg.ldap.bind-dn}"
           "SSSD_LDAP_AUTH_TOKEN=${readFile cfg.ldap.bind-password-file}"
         ]);
-        target-file = "/run/dovecot-secret/sssd.env";
+        target-file = "/run/dovecot-secrets/sssd.env";
       };
 
       dovecotLdapConfig = {
