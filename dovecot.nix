@@ -260,8 +260,6 @@ in {
         socketPath = "/var/run/dovecot2/old-stats";
       };
 
-      nscd.enable = false;
-
       sssd = {
         enable = true;
         # FIXME: pass as config
