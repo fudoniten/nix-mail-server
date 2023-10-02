@@ -232,7 +232,7 @@ in {
             "pass_attrs = =user=%{ldap:cn}"
             "user_attrs = =user=%{ldap:cn}"
           ]);
-        target-file = "/run/dovecot-secret/ldap.conf";
+        target-file = "/run/dovecot-secrets/ldap.conf";
       };
     };
 

@@ -273,32 +273,32 @@ in {
           [sssd]
           config_file_version = 2
           reconnection_retries = 3
-          domains = informis.land
+          domains = $SSSD_LDAP_DOMAIN
           services = nss, pam
 
           [pam]
           reconnection_retries = 3
 
-          [domain/informis.land]
+          [domain/$SSSD_LDAP_DOMAIN]
           cache_credentials = False
           id_provider = ldap
           auth_provider = ldap
           access_provider = ldap
           chpass_provider = ldap
-          ldap_uri = SSSD_LDAP_SERVER
+          ldap_uri = $SSSD_LDAP_SERVER
 
           ldap_schema = rfc2307bis
-          ldap_search_base = SSSD_LDAP_SEARCH_BASE
-          ldap_user_search_base = SSSD_LDAP_USER_SEARCH_BASE
-          ldap_group_search_base = SSSD_LDAP_GROUP_SEARCH_BASE
+          ldap_search_base = $SSSD_LDAP_SEARCH_BASE
+          ldap_user_search_base = $SSSD_LDAP_USER_SEARCH_BASE
+          ldap_group_search_base = $SSSD_LDAP_GROUP_SEARCH_BASE
 
           ldap_user_object_class = user
           ldap_user_name = cn
           ldap_group_object_class = group
           ldap_group_name = cn
 
-          ldap_default_bind_dn = SSSD_LDAP_BIND_DN
-          ldap_default_authtok = SSSD_LDAP_AUTH_TOKEN
+          ldap_default_bind_dn = $SSSD_LDAP_BIND_DN
+          ldap_default_authtok = $SSSD_LDAP_AUTH_TOKEN
         '';
       };
 
