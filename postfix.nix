@@ -248,7 +248,7 @@ in {
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns)
-          ++ [ "permit_mynetworks" "reject_unauth_destination" "reject" ];
+          ++ [ "permit_mynetworks" "reject_unauth_destination" ];
 
         recipient-restrictions = [
           "check_recipient_access ${mappedFile "reject_recipients"}"
