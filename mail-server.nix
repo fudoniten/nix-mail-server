@@ -256,6 +256,7 @@ in {
           external_network.internal = false;
           internal_network.internal = true;
           redis_network.internal = true;
+          ldap_network.internal = true;
         };
         services = let
           antivirusPort = 15407;
@@ -271,8 +272,10 @@ in {
             service = {
               networks = [
                 "internal_network"
-                # Needs access to internet to forward emails
+                # Needs access to internet to forward emails & lookup hosts
                 "external_network"
+                # For auth lookups
+                "ldap_network"
               ];
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
@@ -332,7 +335,7 @@ in {
           };
           imap = {
             service = {
-              networks = [ "internal_network" "external_network" ];
+              networks = [ "internal_network" "ldap_network" ];
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
@@ -380,8 +383,8 @@ in {
             image = cfg.images.ldap-proxy;
             restart = "always";
             networks = [
-              "internal_network"
-              # Needs access to external network for user lookups
+              "ldap_network"
+              # Needs access to external network to talk to Authentik
               "external_network"
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];

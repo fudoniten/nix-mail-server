@@ -260,14 +260,14 @@ in {
         socketPath = "/var/run/dovecot2/old-stats";
       };
 
+      nscd.enable = false;
+
       sssd = {
         enable = true;
         # FIXME: pass as config
         environmentFile = "/run/dovecot-secrets/sssd.env";
         config = ''
           [nss]
-          filter_users = root
-          filter_groups = root
           reconnection_retries = 3
 
           [sssd]
@@ -283,8 +283,6 @@ in {
           cache_credentials = False
           id_provider = ldap
           auth_provider = ldap
-          access_provider = ldap
-          chpass_provider = ldap
           ldap_uri = $SSSD_LDAP_SERVER
 
           ldap_schema = rfc2307bis
