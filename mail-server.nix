@@ -207,6 +207,7 @@ in {
 
       dovecotSssdEnv = {
         source-file = pkgs.writeText "dovecot-sssd.env" (concatStringsSep "\n" [
+          "SSSD_LDAP_DOMAIN=${cfg.primary-domain}"
           "SSSD_LDAP_SERVER=ldap://ldap-proxy:3389/"
           "SSSD_LDAP_SEARCH_BASE=${cfg.ldap.base}"
           "SSSD_LDAP_USER_SEARCH_BASE=${cfg.ldap.user-ou},${cfg.ldap.base}"
