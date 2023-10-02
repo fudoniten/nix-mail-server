@@ -232,6 +232,8 @@ in {
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
+        # Applied to the MAIL FROM header for ALL mail, not just mail we're
+        # sending
         sender-restrictions = [
           "check_sender_access ${mappedFile "reject_senders"}"
           "reject_sender_login_mismatch"
@@ -240,16 +242,14 @@ in {
           "permit_mynetworks"
           "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "reject" ];
+          cfg.blacklist.dns) ++ [ "permit" ];
 
         relay-restrictions = [
           "permit_sasl_authenticated"
           "permit_mynetworks"
-          "reject_unknown_sender_domain"
           "reject_unauth_destination"
-          "reject_unauth_pipelining"
-        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit" ];
+          "permit"
+        ];
 
         recipient-restrictions = [
           "check_recipient_access ${mappedFile "reject_recipients"}"
@@ -257,7 +257,8 @@ in {
           "reject_unknown_recipient_domain"
           "permit_sasl_authenticated"
           "reject_unauth_pipelining"
-          "reject_unauth_destination"
+          ## Not needed, since relay did it already
+          # "reject_unauth_destination"
           "reject_invalid_hostname"
           "reject_non_fqdn_hostname"
           "reject_non_fqdn_sender"
