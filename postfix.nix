@@ -243,12 +243,13 @@ in {
           cfg.blacklist.dns) ++ [ "reject" ];
 
         relay-restrictions = [
-          "reject_unauth_pipelining"
-          "reject_unknown_sender_domain"
           "permit_sasl_authenticated"
+          "permit_mynetworks"
+          "reject_unknown_sender_domain"
+          "reject_unauth_destination"
+          "reject_unauth_pipelining"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns)
-          ++ [ "permit_mynetworks" "reject_unauth_destination" "permit" ];
+          cfg.blacklist.dns) ++ [ "permit" ];
 
         recipient-restrictions = [
           "check_recipient_access ${mappedFile "reject_recipients"}"
