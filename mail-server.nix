@@ -85,7 +85,7 @@ in {
       alias-users = mkOption {
         type = attrsOf (listOf str);
         description =
-          "Map of alias user to list of users who should receive email..";
+          "Map of alias user to list of users who should receive email.";
         default = { };
       };
     };
