@@ -334,8 +334,9 @@ in {
               userList = users:
                 concatStringsSep "," (map (mkEmail cfg.domain) users);
             in concatMapAttrsToList (alias: users:
-              concatMap
-              (domain: "${mkEmail domain alias}  ${mkAliasUsers users}"));
+              let userEmails = concatStringsSep "," users;
+              in concatMap (domain: "${mkEmail domain alias}  ${userEmails}")
+              domains);
         in concatStringsSep "\n" ((mkUserAliases cfg.aliases.user-aliases)
           ++ (mkAliasUsers allDomains cfg.aliases.alias-users));
 
