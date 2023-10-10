@@ -328,7 +328,7 @@ in {
         virtual = let
           mkEmail = domain: user: "${user}@${domain}";
           mkUserAliases = concatMapAttrsToList (user: aliases:
-            map (alias: "${alias}  ${mkEmail cfg.domain user}"));
+            map (alias: "${alias}  ${mkEmail cfg.domain user}") aliases);
           mkAliasUsers = domains:
             let
               userList = users:
