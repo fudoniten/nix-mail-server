@@ -253,6 +253,7 @@ in {
           authPort = 5447;
           userdbPort = 5448;
           dkimPort = 5734;
+          solrPort = 8983;
 
         in {
           smtp = {
@@ -263,6 +264,8 @@ in {
                 "external_network"
                 # For auth lookups
                 "ldap_network"
+                # For full text search
+                "solr_network"
               ];
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
@@ -322,8 +325,12 @@ in {
           };
           imap = {
             service = {
-              networks =
-                [ "internal_network" "external_network" "ldap_network" ];
+              networks = [
+                "internal_network"
+                "external_network"
+                "ldap_network"
+                "solr_network"
+              ];
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
@@ -361,6 +368,10 @@ in {
                     host = "antispam";
                     port = antispamPort;
                   };
+                  solr = {
+                    host = "solr";
+                    port = solrPort;
+                  };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                 };
               };
@@ -375,6 +386,12 @@ in {
               "external_network"
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
+          };
+          solr.service = {
+            image = cfg.images.solr;
+            restart = "always";
+            networks = [ "solr_network" ];
+            volumes = [ "${cfg.state-directory}/solr:/opt/solr/server/solr" ];
           };
           antispam = {
             service = {

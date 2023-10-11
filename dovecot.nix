@@ -157,6 +157,17 @@ in {
       };
     };
 
+    solr = {
+      host = mkOption {
+        type = str;
+        description = "Host providing full-text search with Solr.";
+      };
+      port = mkOption {
+        type = port;
+        description = "Port on which Solr is listening.";
+      };
+    };
+
     max-user-connections = mkOption {
       type = int;
       description = "Maximum allowed simultaneous connections by one user.";
@@ -201,7 +212,51 @@ in {
         "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
       ];
 
-      services = {
+      timers = {
+        solr-commit = {
+          wantedBy = [ "timers.target" "dovecot2.service" ];
+          timerConfig = {
+            OnBootSec = "5m";
+            OnUnitActiveSec = "5m";
+            Unit = "solr-commit.service";
+          };
+        };
+        solr-optimize = {
+          wantedBy = [ "timers.target" "dovecot2.service" ];
+          timerConfig = {
+            OnBootSec = "5m";
+            OnUnitActiveSec = "5m";
+            Unit = "solr-optimize.service";
+          };
+        };
+      };
+
+      services = let
+        solrJob = params: {
+          requires = [ "dovecot2.service" ];
+          path = with pkgs; [ curl ];
+          serviceConfig = {
+            DynamicUser = true;
+            ExecStart =
+              "curl http://${cfg.solr.host}:${cfg.solr.port}/solr/dovecot/update?${params}";
+            PrivateDevices = true;
+            PrivateTmp = true;
+            PrivateMounts = true;
+            ProtectControlGroups = true;
+            ProtectKernelTunables = true;
+            ProtectKernelModules = true;
+            ProtectSystem = true;
+            ProtectHome = true;
+            ProtectClock = true;
+            ProtectKernelLogs = true;
+            Type = "oneshot";
+          };
+        };
+      in {
+        solr-commit = solrJob "commit=true";
+
+        solr-optimize = solrJob "optimize=true";
+
         prometheus-dovecot-exporter = {
           requires = [ "dovecot2.service" ];
           after = [ "dovecot2.service" ];
@@ -246,6 +301,10 @@ in {
             ProtectKernelLogs = true;
             Type = "oneshot";
           };
+        };
+
+        solr-commit = {
+
         };
       };
     };
@@ -315,7 +374,7 @@ in {
         in ''
           ## Extra Config
 
-          mail_plugins = $mail_plugins
+          mail_plugins = $mail_plugins fts fts_solr
 
           ${lib.optionalString cfg.debug ''
             mail_debug = yes
@@ -330,6 +389,11 @@ in {
 
           protocol lmtp {
             mail_plugins = $mail_plugins sieve
+          }
+
+          plugin {
+            fts = solr
+            fts_solr = url=http://${cfg.solr.host}:${cfg.solr.port}/solr/dovecot
           }
 
           mail_access_groups = ${cfg.mail-group}
