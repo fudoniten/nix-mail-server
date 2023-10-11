@@ -236,7 +236,6 @@ in {
           requires = [ "dovecot2.service" ];
           path = with pkgs; [ curl ];
           serviceConfig = {
-            DynamicUser = true;
             ExecStart = "curl http://${cfg.solr.host}:${
                 toString cfg.solr.port
               }/solr/dovecot/update?${params}";
