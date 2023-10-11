@@ -302,10 +302,6 @@ in {
             Type = "oneshot";
           };
         };
-
-        solr-commit = {
-
-        };
       };
     };
 
