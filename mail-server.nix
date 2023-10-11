@@ -252,6 +252,7 @@ in {
           internal_network.internal = true;
           redis_network.internal = true;
           ldap_network.internal = true;
+          solr_network.internal = true;
         };
         services = let
           antivirusPort = 15407;
@@ -272,8 +273,6 @@ in {
                 "external_network"
                 # For auth lookups
                 "ldap_network"
-                # For full text search
-                "solr_network"
               ];
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
@@ -336,7 +335,9 @@ in {
               networks = [
                 "internal_network"
                 "external_network"
+                # For authentication
                 "ldap_network"
+                # For full text search
                 "solr_network"
               ];
               ports = [ "143:143" "993:993" ];
