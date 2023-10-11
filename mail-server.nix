@@ -144,10 +144,18 @@ in {
       };
     };
 
-    images.ldap-proxy = mkOption {
-      type = str;
-      description = "Docker image to use for LDAP proxy.";
-      default = "ghcr.io/goauthentik/ldap";
+    images = {
+      ldap-proxy = mkOption {
+        type = str;
+        description = "Docker image to use for LDAP proxy.";
+        default = "ghcr.io/goauthentik/ldap";
+      };
+
+      solr = mkOption {
+        type = str;
+        description = "Docker image to use for Solr full-text search.";
+        default = "ghcr.io/goauthentik/ldap";
+      };
     };
 
     smtp = {
