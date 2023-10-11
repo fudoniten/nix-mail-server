@@ -237,8 +237,9 @@ in {
           path = with pkgs; [ curl ];
           serviceConfig = {
             DynamicUser = true;
-            ExecStart =
-              "curl http://${cfg.solr.host}:${cfg.solr.port}/solr/dovecot/update?${params}";
+            ExecStart = "curl http://${cfg.solr.host}:${
+                toString cfg.solr.port
+              }/solr/dovecot/update?${params}";
             PrivateDevices = true;
             PrivateTmp = true;
             PrivateMounts = true;
@@ -389,7 +390,9 @@ in {
 
           plugin {
             fts = solr
-            fts_solr = url=http://${cfg.solr.host}:${cfg.solr.port}/solr/dovecot
+            fts_solr = url=http://${cfg.solr.host}:${
+              toString cfg.solr.port
+            }/solr/dovecot
           }
 
           mail_access_groups = ${cfg.mail-group}
