@@ -237,7 +237,7 @@ in {
           serviceConfig = {
             ExecStart = "${pkgs.curl}/bin/curl http://${cfg.solr.host}:${
                 toString cfg.solr.port
-              }/solr/dovecot/update?${params}";
+              }/?${params}";
             PrivateDevices = true;
             PrivateTmp = true;
             PrivateMounts = true;
