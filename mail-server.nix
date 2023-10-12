@@ -413,7 +413,7 @@ in {
             volumes =
               [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
             user = let uid = config.users.users.mail-server-solr.uid;
-            in "${uid}:${uid}";
+            in "${toString uid}:${toString uid}";
           };
           antispam = {
             service = {
