@@ -409,10 +409,15 @@ in {
               port = ${toString cfg.ports.lmtp}
             }
 
-            # Drop privs, since all mail is owned by one user
-            user = ${cfg.mail-user}
+            ## Drop privs, since all mail is owned by one user
+            # user = ${cfg.mail-user}
             # group = ${cfg.mail-group}
-            # user = root
+            ### Necessary bceause:
+            ## - for security reasons lmtp service must be started as root since
+            ##   version 2.2.36. lmtp will drop root privileges after initialisation but it needs
+            ##   to open /self/proc/io as root before that."
+            ## See: https://dovecot.org/list/dovecot/2019-July/116674.html
+            user = root
           }
 
           passdb {
