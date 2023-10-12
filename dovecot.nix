@@ -224,8 +224,8 @@ in {
         solr-optimize = {
           wantedBy = [ "timers.target" "dovecot2.service" ];
           timerConfig = {
-            OnBootSec = "5m";
-            OnUnitActiveSec = "5m";
+            OnBootSec = "12h";
+            OnUnitActiveSec = "12h";
             Unit = "solr-optimize.service";
           };
         };
