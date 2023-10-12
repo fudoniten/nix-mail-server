@@ -203,9 +203,13 @@ in {
       };
     };
 
-    users.users.mail-server-solr = {
-      isSystemUser = true;
-      uid = 10574;
+    users = {
+      users.mail-server-solr = {
+        isSystemUser = true;
+        uid = 10574;
+        group = "mail-server-solr";
+      };
+      group.mail-server-solr.members = [ "mail-server-solr" ];
     };
 
     fudo.secrets.host-secrets."${hostname}" = {
