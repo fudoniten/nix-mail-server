@@ -400,7 +400,8 @@ in {
             image = cfg.images.solr;
             restart = "always";
             networks = [ "solr_network" ];
-            volumes = [ "${cfg.state-directory}/solr:/opt/solr/server/solr" ];
+            volumes =
+              [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
           };
           antispam = {
             service = {
