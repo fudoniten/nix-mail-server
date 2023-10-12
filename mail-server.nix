@@ -203,6 +203,9 @@ in {
       };
     };
 
+    # FIXME: verify solr then kill this
+    networking.firewall.allowedTCPPorts = [ 8983 ];
+
     fudo.secrets.host-secrets."${hostname}" = {
       mailLdapProxyEnv = {
         source-file = pkgs.writeText "ldap-proxy.env" ''
@@ -402,6 +405,7 @@ in {
             networks = [ "solr_network" ];
             volumes =
               [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
+            ports = [ "8983:8983" ];
           };
           antispam = {
             service = {
