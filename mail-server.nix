@@ -154,7 +154,7 @@ in {
       solr = mkOption {
         type = str;
         description = "Docker image to use for Solr full-text search.";
-        default = "ghcr.io/goauthentik/ldap";
+        default = "lmmdock/dovecot-solr:latest";
       };
     };
 
@@ -348,7 +348,7 @@ in {
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
               ];
-              depends_on = [ "antispam" "ldap-proxy" ];
+              depends_on = [ "antispam" "ldap-proxy" "solr" ];
             };
             nixos = {
               useSystemd = true;
