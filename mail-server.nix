@@ -203,15 +203,6 @@ in {
       };
     };
 
-    users = {
-      users.mail-server-solr = {
-        isSystemUser = true;
-        uid = 10574;
-        group = "mail-server-solr";
-      };
-      groups.mail-server-solr.members = [ "mail-server-solr" ];
-    };
-
     fudo.secrets.host-secrets."${hostname}" = {
       mailLdapProxyEnv = {
         source-file = pkgs.writeText "ldap-proxy.env" ''
@@ -412,8 +403,6 @@ in {
             networks = [ "solr_network" ];
             volumes =
               [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
-            user = let uid = config.users.users.mail-server-solr.uid;
-            in "${toString uid}:${toString uid}";
           };
           antispam = {
             service = {
