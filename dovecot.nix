@@ -6,6 +6,11 @@ let
 
   sieveDirectory = "${cfg.state-directory}/sieves";
 
+  dovecotPkg = pkgs.dovecot.overrideAttrs (oldAttrs: {
+    configureFlags = oldAttrs.configureFlags ++ [ "--with-solr" ];
+    buildInputs = oldAttrs.buildInputs ++ [ pkgs.expat ];
+  });
+
 in {
   options.fudo.mail.dovecot = with types; {
     enable = mkEnableOption "Enable Dovecot2 IMAP server.";
