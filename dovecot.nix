@@ -234,9 +234,8 @@ in {
       services = let
         solrJob = params: {
           requires = [ "dovecot2.service" ];
-          path = with pkgs; [ curl ];
           serviceConfig = {
-            ExecStart = "curl http://${cfg.solr.host}:${
+            ExecStart = "${pkgs.curl}/bin/curl http://${cfg.solr.host}:${
                 toString cfg.solr.port
               }/solr/dovecot/update?${params}";
             PrivateDevices = true;
