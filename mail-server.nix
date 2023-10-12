@@ -203,6 +203,11 @@ in {
       };
     };
 
+    users.users.mail-server-solr = {
+      isSystemUser = true;
+      uid = 10574;
+    };
+
     fudo.secrets.host-secrets."${hostname}" = {
       mailLdapProxyEnv = {
         source-file = pkgs.writeText "ldap-proxy.env" ''
@@ -238,6 +243,7 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
+      "d ${cfg.state-directory}/solr               0700 mail-server-solr - - -"
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
@@ -402,6 +408,8 @@ in {
             networks = [ "solr_network" ];
             volumes =
               [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
+            user = let uid = config.users.users.mail-server-solr.uid;
+            in "${uid}:${uid}";
           };
           antispam = {
             service = {
