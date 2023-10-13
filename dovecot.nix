@@ -322,7 +322,7 @@ in {
     environment.etc."dovecot/conf.d/admin.conf" = {
       source = cfg.admin-conf;
       user = config.services.dovecot2.user;
-      mode = 400;
+      mode = "400";
     };
 
     services = {
