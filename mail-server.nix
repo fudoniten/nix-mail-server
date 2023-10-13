@@ -191,6 +191,12 @@ in {
         description =
           "Directory containing SSL certificates for IMAP hostname.";
       };
+
+      api-port = mkOption {
+        type = nullOr port;
+        description = "Port to open for Dovecot HTTP admin API.";
+        default = null;
+      };
     };
   };
 
@@ -251,7 +257,7 @@ in {
       dovecotAdminConfig = {
         source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
           [ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
-          ++ (optional (cfg.ports.dovecot-http-api != null)
+          ++ (optional (cfg.imap.api-port != null)
             "doveadm_api_key = ${readFile dovecotApiKey}"));
         target-file = "/run/dovecot-secrets/admin.conf";
       };
