@@ -354,8 +354,8 @@ in {
         mailPlugins = {
           globally.enable = [ "old_stats" "fts" "fts_xapian" ];
           perProtocol = {
-            imap = [ "imap_sieve" "fts" "fts_xapian" ];
-            lmtp = [ "sieve" "fts" "fts_xapian" ];
+            imap.enable = [ "imap_sieve" "fts" "fts_xapian" ];
+            lmtp.enable = [ "sieve" "fts" "fts_xapian" ];
           };
         };
 
