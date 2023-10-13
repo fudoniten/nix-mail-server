@@ -388,9 +388,9 @@ in {
 
           plugin {
             fts = solr
-            fts_solr = url=http://${cfg.solr.host}:${
-              toString cfg.solr.port
-            }/solr/dovecot
+            fts_solr = url=http://${cfg.solr.host}:${toString cfg.solr.port}/ ${
+              optionalString cfg.debug "debug"
+            }
           }
 
           mail_access_groups = ${cfg.mail-group}
