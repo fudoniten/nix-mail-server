@@ -211,7 +211,7 @@ in {
       };
       groups.mail-server-solr = {
         gid = 8983;
-        members = "mail-server-solr";
+        members = [ "mail-server-solr" ];
       };
     };
 
