@@ -403,7 +403,9 @@ in {
 
           plugin {
             fts = xapian
-            fts_xapian = partial=3 full=20 ${optionalString cfg.debug "verbose"}
+            fts_xapian = partial=3 full=20 ${
+              optionalString cfg.debug "verbose=2"
+            }
             fts_autoindex = yes
             fts_enforced = yes
             fts_autoindex_exclude = \Trash
