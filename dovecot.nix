@@ -43,6 +43,16 @@ in {
         description = "Port on which to serve metrics data.";
         default = 5034;
       };
+      admin = mkOption {
+        type = port;
+        description = "Port on which to listen for admin requests.";
+        default = 5925;
+      };
+      http-admin = mkOption {
+        type = nullOr port;
+        description = "Port on which to listen for admin HTTP API requests.";
+        default = null;
+      };
     };
 
     mail-user = mkOption {
@@ -386,7 +396,7 @@ in {
             mail_plugins = $mail_plugins sieve fts fts_solr
           }
 
-          plugin {
+          plugins {
             fts = solr
             fts_solr = url=http://${cfg.solr.host}:${
               toString cfg.solr.port
@@ -443,6 +453,23 @@ in {
           namespace inbox {
             separator = "/"
             inbox = yes
+          }
+
+          service doveadm {
+            unix_listener doveadm-server {
+              user = ${config.services.dovecot2.user}
+              group = ${config.services.dovecot2.group}
+            }
+            inet_listener {
+              port = ${toString cfg.ports.admin}
+            }
+            ${
+              optionalString (!isNull cfg.ports.http-admin) ''
+                inet_listener http {
+                  port = ${toString cfg.ports.http-admin}
+                }
+              ''
+            }
           }
 
           plugin {
