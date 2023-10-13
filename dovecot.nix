@@ -391,6 +391,10 @@ in {
             fts_solr = url=http://${cfg.solr.host}:${toString cfg.solr.port}/ ${
               optionalString cfg.debug "debug"
             }
+            fts_autoindex_exclude = \Junk
+            fts_autoindex_exclude = \Trash
+            fts_decoder = decode2text
+            fts_enforced = yes
           }
 
           mail_access_groups = ${cfg.mail-group}
@@ -457,6 +461,14 @@ in {
 
             sieve_pipe_bin_dir = ${pipeBin}/bin
             sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
+          }
+
+          service decode2text {
+            executable = script ${pkgs.dovecot}/libexec/dovecot/decode2text.sh
+            user = ${config.services.dovecot2.user}
+            unix_listener = decode2text {
+              mode = 0660
+            }
           }
 
           recipient_delimiter = +
