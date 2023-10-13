@@ -155,12 +155,6 @@ in {
         description = "Docker image to use for LDAP proxy.";
         default = "ghcr.io/goauthentik/ldap";
       };
-
-      solr = mkOption {
-        type = str;
-        description = "Docker image to use for Solr full-text search.";
-        default = "lmmdock/dovecot-solr:latest";
-      };
     };
 
     smtp = {
@@ -214,18 +208,6 @@ in {
       };
     };
 
-    users = {
-      users.mail-server-solr = {
-        isSystemUser = true;
-        uid = 8983;
-        group = "mail-server-solr";
-      };
-      groups.mail-server-solr = {
-        gid = 8983;
-        members = [ "mail-server-solr" ];
-      };
-    };
-
     fudo.secrets.host-secrets."${hostname}" = {
       mailLdapProxyEnv = {
         source-file = pkgs.writeText "ldap-proxy.env" ''
@@ -269,7 +251,6 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
-      "d ${cfg.state-directory}/solr               0700 mail-server-solr mail-server-solr - -"
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
@@ -284,7 +265,6 @@ in {
           internal_network.internal = true;
           redis_network.internal = true;
           ldap_network.internal = true;
-          solr_network.internal = true;
         };
         services = let
           antivirusPort = 15407;
@@ -294,7 +274,6 @@ in {
           authPort = 5447;
           userdbPort = 5448;
           dkimPort = 5734;
-          solrPort = 8983;
 
         in {
           smtp = {
@@ -369,8 +348,6 @@ in {
                 "external_network"
                 # For authentication
                 "ldap_network"
-                # For full text search
-                "solr_network"
               ];
               ports = [ "143:143" "993:993" ];
               volumes = [
@@ -381,7 +358,7 @@ in {
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
               ];
-              depends_on = [ "antispam" "ldap-proxy" "solr" ];
+              depends_on = [ "antispam" "ldap-proxy" ];
             };
             nixos = {
               useSystemd = true;
@@ -410,10 +387,6 @@ in {
                     host = "antispam";
                     port = antispamPort;
                   };
-                  solr = {
-                    host = "solr";
-                    port = solrPort;
-                  };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   admin-conf = "/run/dovecot2/conf.d/admin.conf";
                 };
@@ -429,13 +402,6 @@ in {
               "external_network"
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
-          };
-          solr.service = {
-            image = cfg.images.solr;
-            restart = "always";
-            networks = [ "solr_network" ];
-            volumes = [ "${cfg.state-directory}/solr:/var/solr" ];
-            #user = "${toString config.users.users.mail-server-solr.uid}:8983";
           };
           antispam = {
             service = {

@@ -167,17 +167,6 @@ in {
       };
     };
 
-    solr = {
-      host = mkOption {
-        type = str;
-        description = "Host providing full-text search with Solr.";
-      };
-      port = mkOption {
-        type = port;
-        description = "Port on which Solr is listening.";
-      };
-    };
-
     max-user-connections = mkOption {
       type = int;
       description = "Maximum allowed simultaneous connections by one user.";
@@ -224,50 +213,7 @@ in {
         "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
       ];
 
-      timers = {
-        solr-commit = {
-          wantedBy = [ "timers.target" "dovecot2.service" ];
-          timerConfig = {
-            OnBootSec = "5m";
-            OnUnitActiveSec = "5m";
-            Unit = "solr-commit.service";
-          };
-        };
-        solr-optimize = {
-          wantedBy = [ "timers.target" "dovecot2.service" ];
-          timerConfig = {
-            OnBootSec = "12h";
-            OnUnitActiveSec = "12h";
-            Unit = "solr-optimize.service";
-          };
-        };
-      };
-
-      services = let
-        solrJob = params: {
-          requires = [ "dovecot2.service" ];
-          serviceConfig = {
-            ExecStart = "${pkgs.curl}/bin/curl http://${cfg.solr.host}:${
-                toString cfg.solr.port
-              }/solr/dovecot/update?${params}";
-            PrivateDevices = true;
-            PrivateTmp = true;
-            PrivateMounts = true;
-            ProtectControlGroups = true;
-            ProtectKernelTunables = true;
-            ProtectKernelModules = true;
-            ProtectSystem = true;
-            ProtectHome = true;
-            ProtectClock = true;
-            ProtectKernelLogs = true;
-            Type = "oneshot";
-          };
-        };
-      in {
-        solr-commit = solrJob "commit=true";
-
-        solr-optimize = solrJob "optimize=true";
-
+      services = {
         prometheus-dovecot-exporter = {
           requires = [ "dovecot2.service" ];
           after = [ "dovecot2.service" ];
