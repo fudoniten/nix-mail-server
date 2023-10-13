@@ -319,6 +319,12 @@ in {
       };
     };
 
+    environment.etc."dovecot/conf.d/admin.conf" = {
+      source = cfg.admin-conf;
+      user = config.services.dovecot2.user;
+      mode = 400;
+    };
+
     services = {
       prometheus.exporters.dovecot = {
         enable = true;
@@ -384,7 +390,7 @@ in {
         in ''
           ## Extra Config
 
-          !include ${cfg.admin-conf}
+          !include /etc/dovecot/conf.d/admin.conf
 
           ${lib.optionalString cfg.debug ''
             mail_debug = yes
@@ -401,7 +407,7 @@ in {
             mail_plugins = $mail_plugins sieve fts fts_solr
           }
 
-          plugins {
+          plugin {
             fts = solr
             fts_solr = url=http://${cfg.solr.host}:${
               toString cfg.solr.port
