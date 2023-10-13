@@ -388,9 +388,10 @@ in {
 
           plugin {
             fts = solr
-            fts_solr = url=http://${cfg.solr.host}:${toString cfg.solr.port}/ ${
-              optionalString cfg.debug "debug"
-            }
+            fts_solr = url=http://${cfg.solr.host}:${
+              toString cfg.solr.port
+            }/solr/dovecot ${optionalString cfg.debug "debug"}
+            fts_autoindex = yes
             fts_autoindex_exclude = \Junk
             fts_autoindex_exclude = \Trash
             fts_decoder = decode2text
