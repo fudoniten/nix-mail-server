@@ -188,6 +188,11 @@ in {
       type = str;
       description = "Path to LDAP dovecot2 configuration.";
     };
+
+    admin-conf = mkOption {
+      type = str;
+      description = "Path to admin dovecot2 configuration.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -343,7 +348,7 @@ in {
         modules = with pkgs; [ dovecot_pigeonhole ];
         protocols = [ "sieve" ];
 
-        mailPlugins.globally.enable = [ "old_stats" ];
+        mailPlugins.globally.enable = [ "old_stats" "fts" "fts_solr" ];
 
         sieveScripts = {
           after = builtins.toFile "spam.sieve" ''
@@ -379,7 +384,7 @@ in {
         in ''
           ## Extra Config
 
-          mail_plugins = $mail_plugins fts fts_solr
+          !include ${cfg.admin-conf}
 
           ${lib.optionalString cfg.debug ''
             mail_debug = yes

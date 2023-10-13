@@ -6,6 +6,11 @@ let
   hostname = config.instance.hostname;
   hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
   metricsPort = 5034;
+  dovecotAdminPasswd =
+    pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
+    config.instance.build-seed;
+  dovecotApiKey = pkgs.lib.passwd.stablerandom-passwd-file "dovecot-api-key"
+    config.instance.build-seed;
 
 in {
   options.fudo.mail = with types; {
@@ -242,6 +247,14 @@ in {
           ]);
         target-file = "/run/dovecot-secrets/ldap.conf";
       };
+
+      dovecotAdminConfig = {
+        source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
+          [ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
+          ++ (optional (cfg.ports.dovecot-http-api != null)
+            "doveadm_api_key = ${readFile dovecotApiKey}"));
+        target-file = "/run/dovecot-secrets/admin.conf";
+      };
     };
 
     systemd.tmpfiles.rules = [
@@ -357,6 +370,7 @@ in {
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${hostSecrets.dovecotAdminConfig.target-file}:/run/dovecot2/conf.d/admin.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
@@ -395,6 +409,7 @@ in {
                     port = solrPort;
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+                  admin-conf = "/run/dovecot2/conf.d/admin.conf";
                 };
               };
             };
