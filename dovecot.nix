@@ -379,11 +379,11 @@ in {
 
           protocol imap {
             mail_max_userip_connections = ${toString cfg.max-user-connections}
-            mail_plugins = $mail_plugins imap_sieve
+            mail_plugins = $mail_plugins imap_sieve fts fts_solr
           }
 
           protocol lmtp {
-            mail_plugins = $mail_plugins sieve
+            mail_plugins = $mail_plugins sieve fts fts_solr
           }
 
           plugin {
