@@ -256,9 +256,9 @@ in {
 
       dovecotAdminConfig = {
         source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
-          [ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
-          ++ (optional (cfg.imap.api-port != null)
-            "doveadm_api_key = ${readFile dovecotApiKey}"));
+          ([ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
+            ++ (optional (cfg.imap.api-port != null)
+              "doveadm_api_key = ${readFile dovecotApiKey}")));
         target-file = "/run/dovecot-secrets/admin.conf";
       };
     };
