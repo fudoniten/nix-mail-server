@@ -434,9 +434,8 @@ in {
             image = cfg.images.solr;
             restart = "always";
             networks = [ "solr_network" ];
-            volumes =
-              [ "${cfg.state-directory}/solr:/opt/solr/server/solr/dovecot" ];
-            user = "${toString config.users.users.mail-server-solr.uid}:8983";
+            volumes = [ "${cfg.state-directory}/solr:/var/solr" ];
+            #user = "${toString config.users.users.mail-server-solr.uid}:8983";
           };
           antispam = {
             service = {

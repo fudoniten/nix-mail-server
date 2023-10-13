@@ -217,9 +217,6 @@ in {
       };
     };
 
-    # FIXME: TEMPORARY FOR TESTING
-    environment.systemPackages = with pkgs; [ openldap ];
-
     systemd = {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0711 root root - -"
@@ -252,7 +249,7 @@ in {
           serviceConfig = {
             ExecStart = "${pkgs.curl}/bin/curl http://${cfg.solr.host}:${
                 toString cfg.solr.port
-              }/?${params}";
+              }/solr/dovecot/update?${params}";
             PrivateDevices = true;
             PrivateTmp = true;
             PrivateMounts = true;
@@ -351,10 +348,16 @@ in {
 
         mailboxes = cfg.mailboxes;
 
-        modules = with pkgs; [ dovecot_pigeonhole ];
+        modules = with pkgs; [ dovecot_pigeonhole dovecot_fts_xapian ];
         protocols = [ "sieve" ];
 
-        mailPlugins.globally.enable = [ "old_stats" "fts" "fts_solr" ];
+        mailPlugins = {
+          globally.enable = [ "old_stats" "fts" "fts_xapian" ];
+          perProtocol = {
+            imap = [ "imap_sieve" "fts" "fts_xapian" ];
+            lmtp = [ "sieve" "fts" "fts_xapian" ];
+          };
+        };
 
         sieveScripts = {
           after = builtins.toFile "spam.sieve" ''
@@ -398,25 +401,18 @@ in {
             verbose_ssl = yes
           ''}
 
-          protocol imap {
-            mail_max_userip_connections = ${toString cfg.max-user-connections}
-            mail_plugins = $mail_plugins imap_sieve fts fts_solr
-          }
-
-          protocol lmtp {
-            mail_plugins = $mail_plugins sieve fts fts_solr
-          }
-
           plugin {
-            fts = solr
-            fts_solr = url=http://${cfg.solr.host}:${
-              toString cfg.solr.port
-            }/solr/dovecot ${optionalString cfg.debug "debug"}
+            fts = xapian
+            fts_xapian = partial=3 full=20 ${optionalString cfg.debug "verbose"}
             fts_autoindex = yes
-            fts_autoindex_exclude = \Junk
-            fts_autoindex_exclude = \Trash
-            fts_decoder = decode2text
             fts_enforced = yes
+            fts_autoindex_exclude = \Trash
+            fts_autoindex_exclude = \Junk
+            fts_decoder = decode2text
+          }
+
+          service indexer-worker {
+            vsz_limit = 0
           }
 
           mail_access_groups = ${cfg.mail-group}
