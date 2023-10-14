@@ -323,7 +323,7 @@ in {
             defaultMaps =
               map (domain: "/^(.*)@${escapeDot domain}$/  \${1}") allDomains;
             userAliasMaps = concatMapAttrsToList (username: userAliases:
-              map (alias: "/^${escapeDot alias}$/  ${username}"))
+              map (alias: "/^${escapeDot alias}$/  ${username}") userAliases)
               cfg.aliases.user-aliases;
             aliasUserMaps = mapAttrsToList (alias: users:
               "/^${escapeDot alias}$/  ${concatStringsSep "," users}")
