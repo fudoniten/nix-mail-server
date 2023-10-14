@@ -325,9 +325,11 @@ in {
             userAliasMaps = concatMapAttrsToList (username: userAliases:
               map (alias: "/^${escapeDot alias}$/  ${username}") userAliases)
               cfg.aliases.user-aliases;
-            aliasUserMaps = mapAttrsToList (alias: users:
-              "/^${escapeDot alias}$/  ${concatStringsSep "," users}")
-              cfg.aliases.alias-users;
+            aliasUserMaps = concatMapAttrsToList (alias: users:
+              (map (domain:
+                "/^${escapeDot alias}@${escapeDot domain}$/  ${
+                  concatStringsSep "," users
+                }") allDomains)) cfg.aliases.alias-users;
           in writeEntries "sender_login_maps"
           (defaultMaps ++ userAliasMaps ++ aliasUserMaps);
         };
