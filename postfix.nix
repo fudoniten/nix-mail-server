@@ -319,8 +319,17 @@ in {
             (mkRejectList cfg.blacklist.recipients);
           virtual_mailbox_map = writeEntries "virtual_mailbox_map"
             (map (domain: "@${domain}  OK") allDomains);
-          sender_login_map = writeEntries "sender_login_maps"
-            (map (domain: "/^(.*)@${escapeDot domain}$/  \${1}") allDomains);
+          sender_login_map = let
+            defaultMaps =
+              map (domain: "/^(.*)@${escapeDot domain}$/  \${1}") allDomains;
+            userAliasMaps = concatMapAttrsToList (username: userAliases:
+              map (alias: "/^${escapeDot alias}$/  ${username}"))
+              cfg.aliases.user-aliases;
+            aliasUserMaps = mapAttrsToList (alias: users:
+              "/^${escapeDot alias}$/  ${concatStringsSep "," users}")
+              cfg.aliases.alias-users;
+          in writeEntries "sender_login_maps"
+          (defaultMaps ++ userAliasMaps ++ aliasUserMaps);
         };
 
         networks = cfg.trusted-networks;
