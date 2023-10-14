@@ -331,7 +331,8 @@ in {
                   concatStringsSep "," users
                 }") allDomains)) cfg.aliases.alias-users;
           in writeEntries "sender_login_maps"
-          (defaultMaps ++ userAliasMaps ++ aliasUserMaps);
+          # NOTE: Order is important! If a name matches `default`, it won't keep going
+          (userAliasMaps ++ aliasUserMaps ++ defaultMaps);
         };
 
         networks = cfg.trusted-networks;
@@ -357,12 +358,6 @@ in {
         config = {
           virtual_mailbox_domains = allDomains;
           virtual_mailbox_maps = mappedFile "virtual_mailbox_map";
-
-          ## I don't think these are needed...
-          # virtual_uid_maps = let uid = config.users.users."${cfg.user}".uid;
-          # in "static:${toString uid}";
-          # virtual_gid_maps = let gid = config.users.groups."${cfg.group}".gid;
-          # in "static: ${toString gid}";
 
           virtual_transport = "lmtp:inet:${cfg.lmtp-server.host}:${
               toString cfg.lmtp-server.port
