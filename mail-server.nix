@@ -410,13 +410,6 @@ in {
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
           };
-          solr.service = {
-            image = cfg.images.solr;
-            restart = "always";
-            networks = [ "solr_network" ];
-            volumes = [ "${cfg.state-directory}/solr:/var/solr" ];
-            #user = "${toString config.users.users.mail-server-solr.uid}:8983";
-          };
           antispam = {
             service = {
               networks = [
