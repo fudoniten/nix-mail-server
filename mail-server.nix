@@ -310,7 +310,7 @@ in {
                     isIpv6 = net: !isNull (builtins.match ".+:.+" net);
                     addIpv6Escape = net:
                       let components = builtins.split "/" net;
-                      in "[${elemAt components 0}]/${elemAt components 1}";
+                      in "[${elemAt components 0}]/${elemAt components 2}";
                     escapeIpv6 = net:
                       if isIpv6 net then addIpv6Escape net else net;
                   in map escapeIpv6 cfg.trusted-networks;
