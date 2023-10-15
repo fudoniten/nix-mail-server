@@ -307,7 +307,7 @@ in {
                   local-domains = cfg.extra-domains;
                   hostname = cfg.smtp.hostname;
                   trusted-networks = let
-                    isIpv6 = net: !isNull (builtins.match ":" net);
+                    isIpv6 = net: !isNull (builtins.match ".+:.+" net);
                     addIpv6Escape = net:
                       let components = builtins.split "/" net;
                       in "[${elemAt components 0}]/${elemAt components 1}";
