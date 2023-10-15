@@ -306,7 +306,14 @@ in {
                   domain = cfg.primary-domain;
                   local-domains = cfg.extra-domains;
                   hostname = cfg.smtp.hostname;
-                  trusted-networks = cfg.trusted-networks;
+                  trusted-networks = let
+                    isIpv6 = net: !isNull (builtins.match ":" net);
+                    addIpv6Escape = net:
+                      let components = builtins.split "/" net;
+                      in "[${elemAt components 0}]/${elemAt components 1}";
+                    escapeIpv6 = net:
+                      if isIpv6 net then addIpv6Escape net else net;
+                  in map escapeIpv6 cfg.trusted-networks;
                   blacklist = {
                     senders = cfg.blacklist.senders;
                     recipients = cfg.blacklist.recipients;
@@ -402,6 +409,13 @@ in {
               "external_network"
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
+          };
+          solr.service = {
+            image = cfg.images.solr;
+            restart = "always";
+            networks = [ "solr_network" ];
+            volumes = [ "${cfg.state-directory}/solr:/var/solr" ];
+            #user = "${toString config.users.users.mail-server-solr.uid}:8983";
           };
           antispam = {
             service = {
