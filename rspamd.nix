@@ -45,7 +45,7 @@ in {
       };
 
       port = mkOption {
-        type = str;
+        type = port;
         default = 6379;
       };
 
@@ -102,7 +102,7 @@ in {
 
           "dmark.conf".text = ''
             dmarc = {
-              servers = "${cfg.redis.host}:${cfg.redis.port}";
+              servers = "${cfg.redis.host}:${toString cfg.redis.port}";
               password = "${cfg.redis.password}";
             }
           '';
@@ -110,7 +110,7 @@ in {
           "mx_check.conf".text = ''
             enabled = true;
 
-            servers = "${cfg.redis.host}:${cfg.redis.port}";
+            servers = "${cfg.redis.host}:${toString cfg.redis.port}";
             password = "${cfg.redis.password}";
 
             timeout = 10.0;
@@ -127,7 +127,7 @@ in {
                 selector "ip" {
                 }
                 backend "redis" {
-                  servers = "${cfg.redis.host}:${cfg.redis.port}";
+                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -137,7 +137,7 @@ in {
                 selector "spf" {
                 }
                 backend "redis" {
-                  servers = "${cfg.redis.host}:${cfg.redis.port}";
+                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -147,7 +147,7 @@ in {
                 selector "dkim" {
                 }
                 backend "redis" {
-                  servers = "${cfg.redis.host}:${cfg.redis.port}";
+                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -158,7 +158,7 @@ in {
                   selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
                 }
                 backend "redis" {
-                  servers = "${cfg.redis.host}:${cfg.redis.port}";
+                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
