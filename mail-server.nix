@@ -254,6 +254,10 @@ in {
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
+      redisPasswdFile =
+        pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
+        config.instance.build-seed;
+
       image = { pkgs, ... }: {
         project.name = "mail-server";
         networks = {
@@ -435,6 +439,7 @@ in {
                     host = "antivirus";
                     port = antivirusPort;
                   };
+                  redis.password = readFile redisPasswdFile;
                 };
               };
             };
@@ -501,9 +506,9 @@ in {
                 system.nssModules = lib.mkForce [ ];
                 services.redis.servers."rspamd" = {
                   enable = true;
-                  # null -> all
-                  bind = null;
+                  bind = null; # null -> all
                   port = redisPort;
+                  requirePassFile = "/run/redis/passwd";
                 };
               };
             };

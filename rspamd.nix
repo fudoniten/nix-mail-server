@@ -48,6 +48,11 @@ in {
         type = port;
         default = 6379;
       };
+
+      password = mkOption {
+        type = str;
+        description = "Password with which to connect to Redis.";
+      };
     };
   };
 
@@ -70,6 +75,11 @@ in {
 
         locals = {
           "milter_headers.conf".text = "extended_spam_headers = yes;";
+
+          "redis.conf".text = ''
+            servers = "${cfg.redis.host}:${toString cfg.redis.port}";
+            password = "${cfg.redis.password}";
+          '';
 
           "antivirus.conf".text = ''
             clamav {
@@ -95,16 +105,8 @@ in {
             }
           '';
 
-          "dmarc.conf".text = ''
-            dmarc = {
-              servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-            }
-          '';
-
           "mx_check.conf".text = ''
             enabled = true;
-
-            servers = "${cfg.redis.host}:${toString cfg.redis.port}";
 
             timeout = 10.0;
 
@@ -119,38 +121,22 @@ in {
               ip_reputation = {
                 selector "ip" {
                 }
-                backend "redis" {
-                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                }
-
                 symbol = "IP_REPUTATION";
               }
               spf_reputation =  {
                 selector "spf" {
                 }
-                backend "redis" {
-                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                }
-
                 symbol = "SPF_REPUTATION";
               }
               dkim_reputation =  {
                 selector "dkim" {
                 }
-                backend "redis" {
-                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                }
-
                 symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
               }
               generic_reputation =  {
                 selector "generic" {
                   selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
                 }
-                backend "redis" {
-                  servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                }
-
                 symbol = "GENERIC_REPUTATION";
               }
             }
