@@ -48,11 +48,6 @@ in {
         type = port;
         default = 6379;
       };
-
-      password = mkOption {
-        type = str;
-        description = "Password with which to connect to Redis.";
-      };
     };
   };
 
@@ -100,10 +95,9 @@ in {
             }
           '';
 
-          "dmark.conf".text = ''
+          "dmarc.conf".text = ''
             dmarc = {
               servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-              password = "${cfg.redis.password}";
             }
           '';
 
@@ -111,7 +105,6 @@ in {
             enabled = true;
 
             servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-            password = "${cfg.redis.password}";
 
             timeout = 10.0;
 
@@ -128,7 +121,6 @@ in {
                 }
                 backend "redis" {
                   servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                  password = "${cfg.redis.password}";
                 }
 
                 symbol = "IP_REPUTATION";
@@ -138,7 +130,6 @@ in {
                 }
                 backend "redis" {
                   servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                  password = "${cfg.redis.password}";
                 }
 
                 symbol = "SPF_REPUTATION";
@@ -148,7 +139,6 @@ in {
                 }
                 backend "redis" {
                   servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                  password = "${cfg.redis.password}";
                 }
 
                 symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
@@ -159,7 +149,6 @@ in {
                 }
                 backend "redis" {
                   servers = "${cfg.redis.host}:${toString cfg.redis.port}";
-                  password = "${cfg.redis.password}";
                 }
 
                 symbol = "GENERIC_REPUTATION";

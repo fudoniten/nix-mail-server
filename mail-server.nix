@@ -254,10 +254,6 @@ in {
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
-      redisPasswdFile =
-        pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
-        config.instance.build-seed;
-
       image = { pkgs, ... }: {
         project.name = "mail-server";
         networks = {
@@ -439,7 +435,6 @@ in {
                     host = "antivirus";
                     port = antivirusPort;
                   };
-                  redis.password = readFile redisPasswdFile;
                 };
               };
             };
@@ -495,10 +490,7 @@ in {
           };
           redis = {
             service = {
-              volumes = [
-                "${cfg.state-directory}/redis:/var/lib/redis"
-                "${redisPasswdFile}:/run/redis/passwd"
-              ];
+              volumes = [ "${cfg.state-directory}/redis:/var/lib/redis" ];
               networks = [ "redis_network" ];
             };
             nixos = {
@@ -512,7 +504,6 @@ in {
                   # null -> all
                   bind = null;
                   port = redisPort;
-                  requirePassFile = "/run/redis/passwd";
                 };
               };
             };
