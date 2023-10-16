@@ -12,6 +12,10 @@ let
   dovecotApiKey = pkgs.lib.passwd.stablerandom-passwd-file "dovecot-api-key"
     config.instance.build-seed;
 
+  redisPasswdFile =
+    pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
+    config.instance.build-seed;
+
 in {
   options.fudo.mail = with types; {
     enable = mkEnableOption "Enable mail server.";
@@ -215,7 +219,7 @@ in {
           AUTHENTIK_TOKEN=${cfg.ldap.outpost-token}
           AUTHENTIK_INSECURE=false
         '';
-        target-file = "/run/ldap-proxy/env";
+        target-file = "/run/mail-server/ldap-proxy/env";
       };
 
       dovecotLdapConfig = {
@@ -233,7 +237,7 @@ in {
             "pass_attrs = =user=%{ldap:cn}"
             "user_attrs = =user=%{ldap:cn}"
           ]);
-        target-file = "/run/dovecot-secrets/ldap.conf";
+        target-file = "/run/mail-server/dovecot-secrets/ldap.conf";
       };
 
       dovecotAdminConfig = {
@@ -241,7 +245,12 @@ in {
           ([ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
             ++ (optional (cfg.imap.api-port != null)
               "doveadm_api_key = ${readFile dovecotApiKey}")));
-        target-file = "/run/dovecot-secrets/admin.conf";
+        target-file = "/run/mail-server/dovecot-secrets/admin.conf";
+      };
+
+      redisPasswd = {
+        source-file = redisPasswdFile;
+        target-file = "/run/mail-server/redis/passwd";
       };
     };
 
@@ -254,9 +263,6 @@ in {
     ];
 
     virtualisation.arion.projects.mail-server.settings = let
-      redisPasswdFile =
-        pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
-        config.instance.build-seed;
 
       image = { pkgs, ... }: {
         project.name = "mail-server";
@@ -495,7 +501,10 @@ in {
           };
           redis = {
             service = {
-              volumes = [ "${cfg.state-directory}/redis:/var/lib/redis" ];
+              volumes = [
+                "${cfg.state-directory}/redis:/var/lib/redis"
+                "${hostSecrets.redisPasswd.target-file}:/run/redis/passwd"
+              ];
               networks = [ "redis_network" ];
             };
             nixos = {
