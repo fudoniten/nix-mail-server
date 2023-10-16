@@ -274,6 +274,7 @@ in {
           authPort = 5447;
           userdbPort = 5448;
           dkimPort = 5734;
+          redisPort = 6379;
 
         in {
           smtp = {
@@ -503,13 +504,14 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
+                networking.firewall.allowedTCPPorts = [ redisPort ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 services.redis.servers."rspamd" = {
                   enable = true;
                   # null -> all
                   bind = null;
-                  port = 6379;
+                  port = redisPort;
                   requirePassFile = "/run/redis/passwd";
                 };
               };

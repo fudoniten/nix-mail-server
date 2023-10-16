@@ -38,9 +38,21 @@ in {
       };
     };
 
-    redis.password = mkOption {
-      type = str;
-      description = "Password with which to connect to Redis.";
+    redis = {
+      host = mkOption {
+        type = str;
+        default = "redis";
+      };
+
+      port = mkOption {
+        type = str;
+        default = 6379;
+      };
+
+      password = mkOption {
+        type = str;
+        description = "Password with which to connect to Redis.";
+      };
     };
   };
 
@@ -90,7 +102,7 @@ in {
 
           "dmark.conf".text = ''
             dmarc = {
-              servers = "redis";
+              servers = "${cfg.redis.host}:${cfg.redis.port}";
               password = "${cfg.redis.password}";
             }
           '';
@@ -98,7 +110,7 @@ in {
           "mx_check.conf".text = ''
             enabled = true;
 
-            servers = "redis";
+            servers = "${cfg.redis.host}:${cfg.redis.port}";
             password = "${cfg.redis.password}";
 
             timeout = 10.0;
@@ -115,7 +127,7 @@ in {
                 selector "ip" {
                 }
                 backend "redis" {
-                  servers = "redis";
+                  servers = "${cfg.redis.host}:${cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -125,7 +137,7 @@ in {
                 selector "spf" {
                 }
                 backend "redis" {
-                  servers = "redis";
+                  servers = "${cfg.redis.host}:${cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -135,7 +147,7 @@ in {
                 selector "dkim" {
                 }
                 backend "redis" {
-                  servers = "redis";
+                  servers = "${cfg.redis.host}:${cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
@@ -146,7 +158,7 @@ in {
                   selector = "ip"; # see https://rspamd.com/doc/configuration/selectors.html
                 }
                 backend "redis" {
-                  servers = "redis";
+                  servers = "${cfg.redis.host}:${cfg.redis.port}";
                   password = "${cfg.redis.password}";
                 }
 
