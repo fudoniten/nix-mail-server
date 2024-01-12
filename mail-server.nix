@@ -267,10 +267,22 @@ in {
       image = { pkgs, ... }: {
         project.name = "mail-server";
         networks = {
-          external_network.internal = false;
-          internal_network.internal = true;
-          redis_network.internal = true;
-          ldap_network.internal = true;
+          external_network = {
+            internal = false;
+            dns_enabled = true;
+          };
+          internal_network = {
+            internal = true;
+            dns_enabled = true;
+          };
+          redis_network = {
+            internal = true;
+            dns_enabled = true;
+          };
+          ldap_network = {
+            internal = true;
+            dns_enabled = true;
+          };
         };
         services = let
           antivirusPort = 15407;
