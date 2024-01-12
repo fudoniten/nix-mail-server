@@ -307,6 +307,8 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
+                environment.systemPackages = [ pkgs.inetutils ];
+
                 fudo.mail.postfix = {
                   enable = true;
                   debug = cfg.debug;
