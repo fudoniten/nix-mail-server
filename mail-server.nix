@@ -434,7 +434,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                networking.firewall.enable = false;
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
