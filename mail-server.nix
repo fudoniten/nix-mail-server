@@ -307,6 +307,8 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
+                networking.firewall.enable = false;
+
                 fudo.mail.postfix = {
                   enable = true;
                   debug = cfg.debug;
@@ -380,6 +382,7 @@ in {
                 imports = [ ./dovecot.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall.enable = false;
                 fudo.mail.dovecot = {
                   enable = true;
                   debug = cfg.debug;
@@ -431,6 +434,7 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
+                networking.firewall.enable = false;
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
