@@ -201,14 +201,13 @@ in {
   config = mkIf cfg.enable {
     services = {
       nginx = {
-        virtualHosts = {
-          "${cfg.smtp.hostname}".locations."/metrics" = {
-            proxyPass = "http://localhost:${toString metricsPort}/metrics";
-          };
-          "${cfg.imap.hostname}".locations."/metrics" = {
-            proxyPass = "http://localhost:${toString metricsPort}/metrics";
-          };
-        };
+        virtualHosts =
+          let mailHostnames = unique [ cfg.smtp.hostname cfg.imap.hostname ];
+          in genAttrs mailHostnames (hostname: {
+            "${hostname}".locations."/metrics" = {
+              proxyPass = "http://localhost:${toString metricsPort}/metrics";
+            };
+          });
       };
     };
 
