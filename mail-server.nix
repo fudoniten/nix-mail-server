@@ -204,7 +204,7 @@ in {
         virtualHosts =
           let mailHostnames = unique [ cfg.smtp.hostname cfg.imap.hostname ];
           in genAttrs mailHostnames (hostname: {
-            "${hostname}".locations."/metrics" = {
+            locations."/metrics" = {
               proxyPass = "http://localhost:${toString metricsPort}/metrics";
             };
           });
