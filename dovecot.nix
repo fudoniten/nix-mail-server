@@ -450,7 +450,7 @@ in {
             executable = script ${pkgs.dovecot}/libexec/dovecot/decode2text.sh
             user = ${config.services.dovecot2.user}
             unix_listener decode2text {
-              mode = 0660
+              mode = 0666
             }
           }
 
