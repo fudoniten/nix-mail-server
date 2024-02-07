@@ -239,7 +239,6 @@ in {
           "reject_sender_login_mismatch"
           "reject_non_fqdn_sender"
           "permit_sasl_authenticated"
-          "reject_unknown_sender_domain"
           "permit_mynetworks"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
@@ -275,14 +274,14 @@ in {
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
-          "reject_unknown_helo_hostname"
+          # "reject_unknown_helo_hostname"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
 
         outgoing-helo-restrictions = [
           "permit_mynetworks"
           "reject_invalid_hostname"
-          "reject_unknown_helo_hostname"
+          # "reject_unknown_helo_hostname"
           "permit"
         ];
 
