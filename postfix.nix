@@ -238,9 +238,9 @@ in {
           "check_sender_access ${mappedFile "reject_senders"}"
           "reject_sender_login_mismatch"
           "reject_non_fqdn_sender"
+          "permit_sasl_authenticated"
           "reject_unknown_sender_domain"
           "permit_mynetworks"
-          "permit_sasl_authenticated"
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
 
