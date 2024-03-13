@@ -174,6 +174,13 @@ in {
         description =
           "Directory containing SSL certificates for SMTP hostname.";
       };
+
+      spf.enable = mkOption {
+        type = bool;
+        description =
+          "Enable Sender Polify Framework checking on incoming messages.";
+        default = true;
+      };
     };
 
     imap = {
@@ -310,6 +317,7 @@ in {
 
                 fudo.mail.postfix = {
                   enable = true;
+                  policy-spf.enable = cfg.smtp.spf.enable;
                   debug = cfg.debug;
                   domain = cfg.primary-domain;
                   local-domains = cfg.extra-domains;
