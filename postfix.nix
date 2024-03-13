@@ -93,11 +93,15 @@ in {
       description = "SASL domain to use for authentication.";
     };
 
-    policy-spf.extra-config = mkOption {
-      type = str;
-      default = "";
-      example = "skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1";
-      description = "Extra configuration options for policyd-spf.";
+    policy-spf = {
+      enable = mkDisableOption "Enable Sender Policy Framework checking.";
+
+      extra-config = mkOption {
+        type = str;
+        default = "";
+        example = "skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1";
+        description = "Extra configuration options for policyd-spf.";
+      };
     };
 
     user = mkOption {
@@ -262,9 +266,10 @@ in {
           "reject_non_fqdn_hostname"
           "reject_non_fqdn_sender"
           "reject_non_fqdn_recipient"
-          "check_policy_service unix:private/policy-spf"
-        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns)
+        ] ++ (optional cfg.policy-spf.enable
+          "check_policy_service unix:private/policy-spf")
+          ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+            cfg.blacklist.dns)
           ++ [ "permit_mynetworks" "reject_unauth_destination" "permit" ];
 
         client-restrictions =
