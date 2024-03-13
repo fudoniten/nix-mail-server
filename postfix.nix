@@ -94,7 +94,11 @@ in {
     };
 
     policy-spf = {
-      enable = mkDisableOption "Enable Sender Policy Framework checking.";
+      enable = mkOption {
+        type = bool;
+        description = "Enable Sender Policy Framework checking.";
+        default = true;
+      };
 
       extra-config = mkOption {
         type = str;
