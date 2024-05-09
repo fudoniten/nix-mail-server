@@ -157,7 +157,7 @@ in {
       ldap-proxy = mkOption {
         type = str;
         description = "Docker image to use for LDAP proxy.";
-        default = "ghcr.io/goauthentik/ldap";
+        default = "ghcr.io/goauthentik/ldap:latest";
       };
     };
 
