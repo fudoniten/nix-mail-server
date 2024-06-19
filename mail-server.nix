@@ -421,9 +421,9 @@ in {
             image = cfg.images.ldap-proxy;
             restart = "always";
             networks = [
-              "ldap_network"
               # Needs access to external network to talk to Authentik
               "external_network"
+              "ldap_network"
             ];
             env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
           };
