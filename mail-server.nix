@@ -455,7 +455,11 @@ in {
                     host = "antivirus";
                     port = antivirusPort;
                   };
-                  redis.password = readFile redisPasswdFile;
+                  redis = {
+                    host = "redis";
+                    port = redisPort;
+                    password = readFile redisPasswdFile;
+                  };
                 };
               };
             };
