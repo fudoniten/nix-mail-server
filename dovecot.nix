@@ -350,14 +350,8 @@ in {
         ];
 
         sieve = {
-          globalExtensions = [
-            "vnd.dovecot.pipe"
-            "copy"
-            "imapsieve"
-            "environment"
-            "variables"
-            "fileinto"
-          ];
+          globalExtensions =
+            [ "vnd.dovecot.pipe" "copy" "imapsieve" "environment" "variables" ];
           scripts = {
             after = builtins.toFile "spam.sieve" ''
               require "fileinto";
