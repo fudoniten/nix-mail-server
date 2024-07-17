@@ -350,17 +350,12 @@ in {
         ];
 
         sieve = {
-          globalExtensions = [
-            "vnd.dovecot.pipe"
-            "copy"
-            "imapsieve"
-            "environment"
-            "variables"
-            "fileinto"
-          ];
+          extensions = [ "fileinto" ];
+          globalExtensions =
+            [ "vnd.dovecot.pipe" "copy" "imapsieve" "environment" "variables" ];
           scripts = {
             after = builtins.toFile "spam.sieve" ''
-              require [ "copy" ];
+              require [ "fileinto" ];
 
               if header :is "X-Spam" "Yes" {
                 fileinto "Junk";
