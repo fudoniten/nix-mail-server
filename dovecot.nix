@@ -219,46 +219,46 @@ in {
           after = [ "dovecot2.service" ];
         };
 
-        dovecot-sieve-generator = let
-          isRegularFile = _: type: type == "regular";
-          sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
-          headOrNull = lst: if lst == [ ] then null else head lst;
-          stripExt = ext: filename:
-            headOrNull (builtins.match "(.+)[.]${ext}$" filename);
-          compileFile = filename: _:
-            let
-              filePath = ./sieves + "/${filename}";
-              fileBaseName = stripExt "sieve" filename;
-            in ''
-              if [ -f "${sieveDirectory}/${fileBaseName}.sieve" ]; then
-                rm "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-              fi
-              cp ${filePath} "${sieveDirectory}/${fileBaseName}.sieve"
-              sievec "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-              chmod u+w "${sieveDirectory}/${fileBaseName}.sieve"
-            '';
-        in {
-          wantedBy = [ "dovecot2.service" ];
-          after = [ "dovecot2.service" ];
-          path = with pkgs; [ dovecot_pigeonhole ];
-          serviceConfig = {
-            User = config.services.dovecot2.user;
-            ReadWritePaths = [ sieveDirectory "/run/dovecot2" ];
-            ExecStart = pkgs.writeShellScript "generate-sieves.sh"
-              (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
-            PrivateDevices = true;
-            PrivateTmp = true;
-            PrivateMounts = true;
-            ProtectControlGroups = true;
-            ProtectKernelTunables = true;
-            ProtectKernelModules = true;
-            ProtectSystem = true;
-            ProtectHome = true;
-            ProtectClock = true;
-            ProtectKernelLogs = true;
-            Type = "oneshot";
-          };
-        };
+        # dovecot-sieve-generator = let
+        #   isRegularFile = _: type: type == "regular";
+        #   sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
+        #   headOrNull = lst: if lst == [ ] then null else head lst;
+        #   stripExt = ext: filename:
+        #     headOrNull (builtins.match "(.+)[.]${ext}$" filename);
+        #   compileFile = filename: _:
+        #     let
+        #       filePath = ./sieves + "/${filename}";
+        #       fileBaseName = stripExt "sieve" filename;
+        #     in ''
+        #       if [ -f "${sieveDirectory}/${fileBaseName}.sieve" ]; then
+        #         rm "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
+        #       fi
+        #       cp ${filePath} "${sieveDirectory}/${fileBaseName}.sieve"
+        #       sievec "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
+        #       chmod u+w "${sieveDirectory}/${fileBaseName}.sieve"
+        #     '';
+        # in {
+        #   wantedBy = [ "dovecot2.service" ];
+        #   after = [ "dovecot2.service" ];
+        #   path = with pkgs; [ dovecot_pigeonhole ];
+        #   serviceConfig = {
+        #     User = config.services.dovecot2.user;
+        #     ReadWritePaths = [ sieveDirectory "/run/dovecot2" ];
+        #     ExecStart = pkgs.writeShellScript "generate-sieves.sh"
+        #       (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
+        #     PrivateDevices = true;
+        #     PrivateTmp = true;
+        #     PrivateMounts = true;
+        #     ProtectControlGroups = true;
+        #     ProtectKernelTunables = true;
+        #     ProtectKernelModules = true;
+        #     ProtectSystem = true;
+        #     ProtectHome = true;
+        #     ProtectClock = true;
+        #     ProtectKernelLogs = true;
+        #     Type = "oneshot";
+        #   };
+        # };
       };
     };
 
@@ -430,17 +430,17 @@ in {
           plugin {
             sieve_plugins = sieve_imapsieve sieve_extprograms
             sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
-            sieve_default = file:${sieveDirectory}/%u/default.sieve
+            # sieve_default = file:${sieveDirectory}/%u/default.sieve
             sieve_default_name = default
             # From elsewhere to Spam folder
             imapsieve_mailbox1_name = Junk
             imapsieve_mailbox1_causes = COPY
-            imapsieve_mailbox1_before = file:${sieveDirectory}/spam.svbin
+            # imapsieve_mailbox1_before = file:${sieveDirectory}/spam.svbin
             # From Spam folder to elsewhere
             imapsieve_mailbox2_name = *
             imapsieve_mailbox2_from = Junk
             imapsieve_mailbox2_causes = COPY
-            imapsieve_mailbox2_before = file:${sieveDirectory}/ham.svbin
+            # imapsieve_mailbox2_before = file:${sieveDirectory}/ham.svbin
 
             sieve_pipe_bin_dir = ${pipeBin}/bin
             sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
