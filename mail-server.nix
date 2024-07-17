@@ -372,6 +372,7 @@ in {
                 # For authentication
                 "ldap_network"
               ];
+              capabilities.SYS_ADMIN = true;
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
