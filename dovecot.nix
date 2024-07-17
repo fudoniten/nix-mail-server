@@ -310,31 +310,31 @@ in {
             require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
 
             if environment :matches "imap.user" "*" {
-              set "username" "${1}";
+              set "username" "''${1}";
             }
 
-            pipe :copy "rspamd_learn_spam" [ "${username}" ];
+            pipe :copy "rspamd_learn_spam" [ "''${username}" ];
           '';
           reportHam = builtins.toFile "ham.sieve" ''
             require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
 
             if environment :matches "imap.mailbox" "*" {
-              set "mailbox" "${1}";
+              set "mailbox" "''${1}";
             }
 
-            if string "${mailbox}" "Trash" {
+            if string "''${mailbox}" "Trash" {
               stop;
             }
 
-            if string "${mailbox}" "Junk" {
+            if string "''${mailbox}" "Junk" {
               stop;
             }
 
             if environment :matches "imap.user" "*" {
-              set "username" "${1}";
+              set "username" "''${1}";
             }
 
-            pipe :copy "rspamd_learn_ham" [ "${username}" ];
+            pipe :copy "rspamd_learn_ham" [ "''${username}" ];
           '';
         in [ { after = reportSpam; } { after = reportHam; } ];
 
