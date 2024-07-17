@@ -305,15 +305,58 @@ in {
           };
         };
 
-        sieveScripts = {
-          after = builtins.toFile "spam.sieve" ''
-            require "fileinto";
+        imapsieve.mailbox = let
+          reportSpam = builtins.toFile "spam.sieve" ''
+            require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
 
-            if header :is "X-Spam" "Yes" {
-              fileinto "Junk";
+            if environment :matches "imap.user" "*" {
+              set "username" "${1}";
+            }
+
+            pipe :copy "rspamd_learn_spam" [ "${username}" ];
+          '';
+          reportHam = builtins.toFile "ham.sieve" ''
+            require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+
+            if environment :matches "imap.mailbox" "*" {
+              set "mailbox" "${1}";
+            }
+
+            if string "${mailbox}" "Trash" {
               stop;
             }
+
+            if string "${mailbox}" "Junk" {
+              stop;
+            }
+
+            if environment :matches "imap.user" "*" {
+              set "username" "${1}";
+            }
+
+            pipe :copy "rspamd_learn_ham" [ "${username}" ];
           '';
+        in [ { after = reportSpam; } { after = reportHam; } ];
+
+        sieve = {
+          globalExtensions = [
+            "vnd.dovecot.pipe"
+            "copy"
+            "imapsieve"
+            "environment"
+            "variables"
+            "fileinto"
+          ];
+          scripts = {
+            after = builtins.toFile "spam.sieve" ''
+              require "fileinto";
+
+              if header :is "X-Spam" "Yes" {
+                fileinto "Junk";
+                stop;
+              }
+            '';
+          };
         };
 
         extraConfig = let
