@@ -298,6 +298,7 @@ in {
                 # For auth lookups
                 "ldap_network"
               ];
+              capabilities.SYS_ADMIN = true;
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
