@@ -336,7 +336,18 @@ in {
 
             pipe :copy "rspamd_learn_ham" [ "''${username}" ];
           '';
-        in [ { after = reportSpam; } { after = reportHam; } ];
+        in [
+          {
+            name = "report-spam";
+            causes = [ "COPY" ];
+            after = reportSpam;
+          }
+          {
+            name = "report-ham";
+            causes = [ "COPY" ];
+            after = reportHam;
+          }
+        ];
 
         sieve = {
           globalExtensions = [
