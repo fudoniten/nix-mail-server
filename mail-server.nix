@@ -206,18 +206,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    services = {
-      nginx = {
-        virtualHosts =
-          let mailHostnames = unique [ cfg.smtp.hostname cfg.imap.hostname ];
-          in genAttrs mailHostnames (hostname: {
-            locations."/metrics" = {
-              proxyPass = "http://localhost:${toString metricsPort}/metrics";
-            };
-          });
-      };
-    };
-
     fudo.secrets.host-secrets."${hostname}" = {
       mailLdapProxyEnv = {
         source-file = pkgs.writeText "ldap-proxy.env" ''
@@ -557,13 +545,13 @@ in {
                   virtualHosts.localhost = {
                     default = true;
                     locations = {
-                      "/postfix" = {
+                      "/metrics/postfix" = {
                         proxyPass = "http://smtp:${toString metricsPort}/";
                       };
-                      "/dovecot" = {
+                      "/metrics/dovecot" = {
                         proxyPass = "http://imap:${toString metricsPort}/";
                       };
-                      "/rspamd" = {
+                      "/metrics/rspamd" = {
                         proxyPass = "http://antispam:${toString metricsPort}/";
                       };
                     };
