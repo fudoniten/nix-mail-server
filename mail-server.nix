@@ -461,6 +461,7 @@ in {
                 # Needs external access for database updates
                 "external_network"
               ];
+              capabilities.SYS_ADMIN = true;
               volumes = [ "${cfg.state-directory}/antivirus:/state" ];
             };
             nixos = {
@@ -485,6 +486,7 @@ in {
           dkim = {
             service = {
               networks = [ "internal_network" ];
+              capabilities.SYS_ADMIN = true;
               volumes = [ "${cfg.state-directory}/dkim:/var/lib/opendkim" ];
             };
             nixos = {
@@ -510,6 +512,7 @@ in {
                 "${hostSecrets.redisPasswd.target-file}:/run/redis/passwd"
               ];
               networks = [ "redis_network" ];
+              capabilities.SYS_ADMIN = true;
             };
             nixos = {
               useSystemd = true;
@@ -531,6 +534,7 @@ in {
               networks = [ "internal_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
               depends_on = [ "smtp" "imap" "antispam" ];
+              capabilities.SYS_ADMIN = true;
             };
             nixos = {
               useSystemd = true;
