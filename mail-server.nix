@@ -5,7 +5,6 @@ let
   cfg = config.fudo.mail;
   hostname = config.instance.hostname;
   hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
-  metricsPort = 5034;
   dovecotAdminPasswd =
     pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
     config.instance.build-seed;
@@ -102,7 +101,7 @@ in {
     metrics-port = mkOption {
       type = port;
       description = "Port on which to serve metrics.";
-      default = metricsPort;
+      default = 5034;
     };
 
     trusted-networks = mkOption {
@@ -303,7 +302,7 @@ in {
                 system.nssModules = lib.mkForce [ ];
 
                 networking.firewall = {
-                  allowedTCPPorts = [ 25 587 465 cfg.metrics-port ];
+                  allowedTCPPorts = [ 25 587 465 5035 ];
                 };
 
                 fudo.mail.postfix = {
@@ -337,7 +336,7 @@ in {
                   };
                   sasl-domain = cfg.sasl-domain;
                   message-size-limit = cfg.message-size-limit;
-                  ports.metrics = cfg.metrics-port;
+                  ports.metrics = 5035;
                   rspamd-server = {
                     host = "antispam";
                     port = antispamPort;
@@ -382,8 +381,8 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall = {
-                  allowedTCPPorts = [ 143 993 cfg.metrics-port ];
-                  allowedUDPPorts = [ 143 993 cfg.metrics-port ];
+                  allowedTCPPorts = [ 143 993 5036 ];
+                  allowedUDPPorts = [ 143 993 ];
                 };
                 fudo.mail.dovecot = {
                   enable = true;
@@ -394,7 +393,7 @@ in {
                     lmtp = lmtpPort;
                     auth = authPort;
                     userdb = userdbPort;
-                    metrics = cfg.metrics-port;
+                    metrics = 5036;
                   };
                   mail-user = cfg.mail-user;
                   mail-group = cfg.mail-group;
@@ -440,7 +439,7 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall = {
-                  allowedTCPPorts = [ antispamPort cfg.metrics-port ];
+                  allowedTCPPorts = [ antispamPort 5037 ];
                   allowedUDPPorts = [ antispamPort ];
                 };
                 fudo.mail.rspamd = {
@@ -448,7 +447,7 @@ in {
                   ports = {
                     milter = antispamPort;
                     controller = antispamControllerPort;
-                    metrics = cfg.metrics-port;
+                    metrics = 5037;
                   };
                   antivirus = {
                     host = "antivirus";
@@ -572,16 +571,9 @@ in {
                   virtualHosts."_" = {
                     default = true;
                     locations = {
-                      "/metrics/postfix" = {
-                        proxyPass = "http://smtp:${toString cfg.metrics-port}/";
-                      };
-                      "/metrics/dovecot" = {
-                        proxyPass = "http://imap:${toString cfg.metrics-port}/";
-                      };
-                      "/metrics/rspamd" = {
-                        proxyPass =
-                          "http://antispam:${toString cfg.metrics-port}/";
-                      };
+                      "/metrics/postfix".proxyPass = "http://smtp:5035/";
+                      "/metrics/dovecot".proxyPass = "http://imap:5036/";
+                      "/metrics/rspamd".proxyPass = "http://antispam:5037/";
                     };
                   };
                 };
