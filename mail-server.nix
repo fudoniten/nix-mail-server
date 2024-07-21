@@ -288,7 +288,7 @@ in {
                 "ldap_network"
               ];
               capabilities = {
-                BFP = true;
+                BPF = true;
                 NET_ADMIN = true;
                 NET_BIND_SERVICE = true;
                 SYS_ADMIN = true;
