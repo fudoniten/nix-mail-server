@@ -301,9 +301,7 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
-                networking.firewall = {
-                  allowedTCPPorts = [ 25 587 465 5035 ];
-                };
+                networking.firewall.enable = false;
 
                 fudo.mail.postfix = {
                   enable = true;
@@ -380,10 +378,7 @@ in {
                 imports = [ ./dovecot.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall = {
-                  allowedTCPPorts = [ 143 993 5036 ];
-                  allowedUDPPorts = [ 143 993 ];
-                };
+                networking.firewall.enable = false;
                 fudo.mail.dovecot = {
                   enable = true;
                   debug = cfg.debug;
@@ -438,10 +433,7 @@ in {
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall = {
-                  allowedTCPPorts = [ antispamPort 5037 ];
-                  allowedUDPPorts = [ antispamPort ];
-                };
+                networking.firewall.enable = false;
                 fudo.mail.rspamd = {
                   enable = true;
                   ports = {
@@ -478,11 +470,7 @@ in {
                 imports = [ ./clamav.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall = {
-                  enable = true;
-                  allowedTCPPorts = [ antivirusPort ];
-                  allowedUDPPorts = [ antivirusPort ];
-                };
+                networking.firewall.enable = false;
                 fudo.mail.clamav = {
                   enable = true;
                   state-directory = "/state";
@@ -503,10 +491,7 @@ in {
                 imports = [ ./dkim.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall = {
-                  allowedTCPPorts = [ dkimPort ];
-                  allowedUDPPorts = [ dkimPort ];
-                };
+                networking.firewall.enable = false;
                 fudo.mail.dkim = {
                   enable = true;
                   debug = cfg.debug;
@@ -529,7 +514,7 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                networking.firewall.allowedTCPPorts = [ redisPort ];
+                networking.firewall.enable = false;
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 services.redis.servers."rspamd" = {
@@ -553,7 +538,7 @@ in {
               configuration = {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall.allowedTCPPorts = [ 80 ];
+                networking.firewall.enable = false;
                 services.nginx = {
                   enable = true;
                   recommendedProxySettings = true;
