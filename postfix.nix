@@ -185,6 +185,10 @@ in {
       groups."${cfg.group}".members = [ cfg.user ];
     };
 
+    systemd.tmpfiles.rules = [
+      "d /var/lib/postfix/queue/public 0751 ${config.services.postfix.user} postdrop - -"
+    ];
+
     services = {
       prometheus.exporters.postfix = {
         enable = true;
