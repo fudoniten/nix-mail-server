@@ -556,9 +556,10 @@ in {
                   virtualHosts."_" = {
                     default = true;
                     locations = {
-                      "/metrics/postfix".proxyPass = "http://smtp:5035/";
-                      "/metrics/dovecot".proxyPass = "http://imap:5036/";
-                      "/metrics/rspamd".proxyPass = "http://antispam:5037/";
+                      "/metrics/postfix".proxyPass = "http://smtp:5035/metrics";
+                      "/metrics/dovecot".proxyPass = "http://imap:5036/metrics";
+                      "/metrics/rspamd".proxyPass =
+                        "http://antispam:5037/metrics";
                     };
                   };
                 };
