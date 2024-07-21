@@ -541,6 +541,7 @@ in {
               configuration = {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall.allowedTCPPorts = [ 80 ];
                 services.nginx = {
                   enable = true;
                   recommendedProxySettings = true;
