@@ -141,6 +141,22 @@ in {
             }
           '';
 
+          "metrics_exporter.conf".text = ''
+            backend = "graphite";
+            metrics = [
+              "actions.add header",
+              "actions.greylist",
+              "actions.reject",
+              "actions.rewrite subject",
+              "actions.soft reject",
+              "connections",
+              "ham_count",
+              "spam_count",
+              "learned",
+              "scanned",
+            ];
+          '';
+
           # SURBL checks URLs in emails against known-bad urls
           "rbl.conf".text = ''
             surbl {
