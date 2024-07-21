@@ -554,13 +554,13 @@ in {
             private = false;
             chroot = false;
             maxproc = 1;
-            command = "${pkgs.postgres}/libexec/postfix/postlogd";
+            command = "${pkgs.postfix}/libexec/postfix/postlogd";
           };
           showq = {
             type = "unix";
             private = false;
             chroot = true;
-            command = "${pkgs.postgres}/libexec/postfix/showq";
+            command = "${pkgs.postfix}/libexec/postfix/showq";
           };
         };
       };
