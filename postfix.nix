@@ -561,6 +561,7 @@ in {
             maxproc = 1;
             command = "${pkgs.postfix}/libexec/postfix/postlogd";
           };
+          showq = { private = false; };
           # showq = {
           #   type = "unix";
           #   private = false;
