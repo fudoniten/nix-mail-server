@@ -189,7 +189,7 @@ in {
         systemd.enable = true;
         showqPath = "/var/lib/postfix/queue/public/showq";
         group = config.services.postfix.group;
-        listenAddress = "127.0.0.1";
+        listenAddress = "0.0.0.0";
         port = cfg.ports.metrics;
       };
 
