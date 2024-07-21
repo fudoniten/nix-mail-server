@@ -247,6 +247,8 @@ in {
       };
     };
 
+    networking.firewall = { allowedTCPPorts = [ 25 143 465 587 993 ]; };
+
     systemd.tmpfiles.rules = [
       "d ${cfg.state-directory}/dovecot            0700 - - - -"
       "d ${cfg.state-directory}/dovecot-dhparams   0700 - - - -"
