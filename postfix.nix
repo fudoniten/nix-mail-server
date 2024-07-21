@@ -8,6 +8,8 @@ let
 
   concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
 
+  mailLogFile = "/run/mail.log";
+
 in {
   options.fudo.mail.postfix = with types; {
     enable = mkEnableOption "Enable Postfix SMTP server.";
@@ -188,6 +190,7 @@ in {
         enable = true;
         systemd.enable = true;
         showqPath = "/var/lib/postfix/queue/public/showq";
+        logfilePath = logFilePath;
         group = config.services.postfix.group;
         listenAddress = "0.0.0.0";
         port = cfg.ports.metrics;
@@ -458,6 +461,9 @@ in {
           smtpd_tls_loglevel = "1";
 
           tls_random_source = "dev:/dev/urandom";
+
+          maillog_file = mailLogFile;
+          maillog_file_permissions = "0660";
         };
 
         submissionOptions = {
@@ -542,6 +548,19 @@ in {
             command = "cleanup";
             args =
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
+          };
+          postlog = {
+            type = "unix-dgram";
+            private = false;
+            chroot = false;
+            maxproc = 1;
+            command = "${pkgs.postgres}/libexec/postfix/postlogd";
+          };
+          showq = {
+            type = "unix";
+            private = false;
+            chroot = true;
+            command = "${pkgs.postgres}/libexec/postfix/showq";
           };
         };
       };
