@@ -527,7 +527,10 @@ in {
               "${policydSpfConfig}"
             ];
           };
-          stmp.command = if cfg.debug then "smtp -v" else "smtp";
+          stmp = {
+            command = if cfg.debug then "smtp -v" else "smtp";
+            maxproc = 10;
+          };
           submission-header-cleanup = let
             submissionHeaderCleanupRules =
               pkgs.writeText "submission_header_cleanup_rules" ''
