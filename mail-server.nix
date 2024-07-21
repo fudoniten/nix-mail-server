@@ -302,7 +302,9 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
-                networking.firewall.enable = false;
+                networking.firewall = {
+                  allowedTCPPorts = [ 25 587 465 cfg.metrics-port ];
+                };
 
                 fudo.mail.postfix = {
                   enable = true;
@@ -379,7 +381,10 @@ in {
                 imports = [ ./dovecot.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
-                networking.firewall.enable = false;
+                networking.firewall = {
+                  allowedTCPPorts = [ 143 993 cfg.metrics-port ];
+                  allowedUDPPorts = [ 143 993 cfg.metrics-port ];
+                };
                 fudo.mail.dovecot = {
                   enable = true;
                   debug = cfg.debug;
@@ -434,6 +439,10 @@ in {
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall = {
+                  allowedTCPPorts = [ antispamPort cfg.metrics-port ];
+                  allowedUDPPorts = [ antispamPort ];
+                };
                 fudo.mail.rspamd = {
                   enable = true;
                   ports = {
@@ -495,6 +504,10 @@ in {
                 imports = [ ./dkim.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
+                networking.firewall = {
+                  allowedTCPPorts = [ dkimPort ];
+                  allowedUDPPorts = [ dkimPort ];
+                };
                 fudo.mail.dkim = {
                   enable = true;
                   debug = cfg.debug;
