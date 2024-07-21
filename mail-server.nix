@@ -287,6 +287,7 @@ in {
                 # For auth lookups
                 "ldap_network"
               ];
+              privileged = true;
               capabilities = {
                 BPF = true;
                 NET_ADMIN = true;
