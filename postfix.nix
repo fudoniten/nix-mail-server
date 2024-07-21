@@ -190,7 +190,7 @@ in {
         enable = true;
         systemd.enable = true;
         showqPath = "/var/lib/postfix/queue/public/showq";
-        logfilePath = logFilePath;
+        logfilePath = mailLogFile;
         group = config.services.postfix.group;
         listenAddress = "0.0.0.0";
         port = cfg.ports.metrics;
