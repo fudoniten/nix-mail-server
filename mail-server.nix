@@ -287,7 +287,6 @@ in {
                 "ldap_network"
                 "internal_network"
               ];
-              privileged = true;
               capabilities.SYS_ADMIN = true;
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
