@@ -528,7 +528,7 @@ in {
           };
           metrics-proxy = {
             service = {
-              networks = [ "internal_network" ];
+              networks = [ "internal_network" "external_network" ];
               ports = [ "${toString cfg.metrics-port}:80" ];
               depends_on = [ "smtp" "imap" "antispam" ];
               capabilities.SYS_ADMIN = true;
