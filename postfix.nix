@@ -463,8 +463,8 @@ in {
 
           tls_random_source = "dev:/dev/urandom";
 
-          maillog_file = mailLogFile;
-          maillog_file_permissions = "0640";
+          # maillog_file = mailLogFile;
+          # maillog_file_permissions = "0640";
         };
 
         submissionOptions = {
@@ -527,6 +527,7 @@ in {
               "${policydSpfConfig}"
             ];
           };
+          stmp.command = if cfg.debug then "smtp -v" else "smtp";
           submission-header-cleanup = let
             submissionHeaderCleanupRules =
               pkgs.writeText "submission_header_cleanup_rules" ''
@@ -550,13 +551,11 @@ in {
             args =
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
           };
-          postlog = {
-            type = "unix-dgram";
-            private = false;
-            chroot = false;
-            maxproc = 1;
-            command = "${pkgs.postfix}/libexec/postfix/postlogd";
-          };
+          # postlog = {
+          #   type = "unix-dgram";
+          #   maxproc = 1;
+          #   command = "${pkgs.postfix}/libexec/postfix/postlogd";
+          # };
           showq = { private = false; };
           # showq = {
           #   type = "unix";
