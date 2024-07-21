@@ -8,7 +8,7 @@ let
 
   concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
 
-  mailLogFile = "/run/mail.log";
+  mailLogFile = "/var/log/mail.log";
 
 in {
   options.fudo.mail.postfix = with types; {
@@ -463,7 +463,7 @@ in {
           tls_random_source = "dev:/dev/urandom";
 
           maillog_file = mailLogFile;
-          maillog_file_permissions = "0660";
+          maillog_file_permissions = "0640";
         };
 
         submissionOptions = {
