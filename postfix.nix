@@ -429,7 +429,7 @@ in {
           # Handled by submission
           smtpd_tls_security_level = "may";
 
-          smtpd_tls_eecdh_grade = "ultra";
+          # smtpd_tls_eecdh_grade = "ultra";
 
           # Disable obselete protocols
           smtpd_tls_protocols =
