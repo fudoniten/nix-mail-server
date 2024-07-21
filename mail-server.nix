@@ -291,12 +291,7 @@ in {
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
-              ports = [
-                "25:25"
-                "587:587"
-                "465:465"
-                "${toString cfg.metrics-port}:${toString cfg.metrics-port}"
-              ];
+              ports = [ "25:25" "587:587" "465:465" ];
               depends_on = [ "imap" "ldap-proxy" ];
             };
             nixos = {
@@ -367,11 +362,7 @@ in {
                 "ldap_network"
               ];
               capabilities.SYS_ADMIN = true;
-              ports = [
-                "143:143"
-                "993:993"
-                "${toString cfg.metrics-port}:${toString cfg.metrics-port}"
-              ];
+              ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
@@ -436,8 +427,6 @@ in {
               ];
               capabilities.SYS_ADMIN = true;
               depends_on = [ "antivirus" "redis" ];
-              ports =
-                [ "${toString cfg.metrics-port}:${toString cfg.metrics-port}" ];
             };
             nixos = {
               useSystemd = true;
@@ -540,41 +529,42 @@ in {
               };
             };
           };
-          # metrics-proxy = {
-          #   service = {
-          #     networks = [ "internal_network" ];
-          #     ports = [ "${toString cfg.metrics-port}:80" ];
-          #     depends_on = [ "smtp" "imap" "antispam" ];
-          #     capabilities.SYS_ADMIN = true;
-          #   };
-          #   nixos = {
-          #     useSystemd = true;
-          #     configuration = {
-          #       boot.tmp.useTmpfs = true;
-          #       system.nssModules = lib.mkForce [ ];
-          #       services.nginx = {
-          #         enable = true;
-          #         recommendedProxySettings = true;
-          #         recommendedGzipSettings = true;
-          #         recommendedOptimisation = true;
-          #         virtualHosts.localhost = {
-          #           default = true;
-          #           locations = {
-          #             "/metrics/postfix" = {
-          #               proxyPass = "http://smtp:${toString metricsPort}/";
-          #             };
-          #             "/metrics/dovecot" = {
-          #               proxyPass = "http://imap:${toString metricsPort}/";
-          #             };
-          #             "/metrics/rspamd" = {
-          #               proxyPass = "http://antispam:${toString metricsPort}/";
-          #             };
-          #           };
-          #         };
-          #       };
-          #     };
-          #   };
-          # };
+          metrics-proxy = {
+            service = {
+              networks = [ "internal_network" ];
+              ports = [ "${toString cfg.metrics-port}:80" ];
+              depends_on = [ "smtp" "imap" "antispam" ];
+              capabilities.SYS_ADMIN = true;
+            };
+            nixos = {
+              useSystemd = true;
+              configuration = {
+                boot.tmp.useTmpfs = true;
+                system.nssModules = lib.mkForce [ ];
+                services.nginx = {
+                  enable = true;
+                  recommendedProxySettings = true;
+                  recommendedGzipSettings = true;
+                  recommendedOptimisation = true;
+                  virtualHosts."_" = {
+                    default = true;
+                    locations = {
+                      "/metrics/postfix" = {
+                        proxyPass = "http://smtp:${toString cfg.metrics-port}/";
+                      };
+                      "/metrics/dovecot" = {
+                        proxyPass = "http://imap:${toString cfg.metrics-port}/";
+                      };
+                      "/metrics/rspamd" = {
+                        proxyPass =
+                          "http://antispam:${toString cfg.metrics-port}/";
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
         };
       };
     in { imports = [ image ]; };
