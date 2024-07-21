@@ -34,11 +34,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    networking.firewall = {
-      enable = true;
-      allowedTCPPorts = [ cfg.port ];
-    };
-
     services.opendkim = {
       enable = true;
       selector = cfg.selector;

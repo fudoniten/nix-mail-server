@@ -57,12 +57,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    networking.firewall = {
-      enable = true;
-      allowedTCPPorts = with cfg.ports; [ metrics controller milter ];
-      allowedUDPPorts = with cfg.ports; [ controller milter ];
-    };
-
     services = {
       prometheus.exporters.rspamd = {
         enable = true;
