@@ -554,13 +554,13 @@ in {
             args =
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
           };
-          # postlog = {
-          #   type = "unix-dgram";
-          #   private = false;
-          #   chroot = false;
-          #   maxproc = 1;
-          #   command = "${pkgs.postfix}/libexec/postfix/postlogd";
-          # };
+          postlog = {
+            type = "unix-dgram";
+            private = false;
+            chroot = false;
+            maxproc = 1;
+            command = "${pkgs.postfix}/libexec/postfix/postlogd";
+          };
           # showq = {
           #   type = "unix";
           #   private = false;
