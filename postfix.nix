@@ -193,8 +193,8 @@ in {
       prometheus.exporters.postfix = {
         enable = true;
         systemd.enable = true;
-        showqPath = "/var/lib/postfix/queue/public/showq";
-        logfilePath = mailLogFile;
+        # showqPath = "/var/lib/postfix/queue/public/showq";
+        # logfilePath = mailLogFile;
         user = config.services.postfix.user;
         group = config.services.postfix.group;
         listenAddress = "0.0.0.0";
@@ -554,19 +554,19 @@ in {
             args =
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
           };
-          postlog = {
-            type = "unix-dgram";
-            private = false;
-            chroot = false;
-            maxproc = 1;
-            command = "${pkgs.postfix}/libexec/postfix/postlogd";
-          };
-          showq = {
-            type = "unix";
-            private = false;
-            chroot = true;
-            command = "${pkgs.postfix}/libexec/postfix/showq";
-          };
+          # postlog = {
+          #   type = "unix-dgram";
+          #   private = false;
+          #   chroot = false;
+          #   maxproc = 1;
+          #   command = "${pkgs.postfix}/libexec/postfix/postlogd";
+          # };
+          # showq = {
+          #   type = "unix";
+          #   private = false;
+          #   chroot = true;
+          #   command = "${pkgs.postfix}/libexec/postfix/showq";
+          # };
         };
       };
     };
