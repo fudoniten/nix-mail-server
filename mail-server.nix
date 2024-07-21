@@ -303,7 +303,10 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
 
-                networking.firewall.enable = false;
+                networking = {
+                  useDHCP = false;
+                  firewall.enable = false;
+                };
 
                 fudo.mail.postfix = {
                   enable = true;
