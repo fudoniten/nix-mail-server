@@ -267,7 +267,6 @@ in {
           redis_network.internal = true;
           ldap_network.internal = true;
         };
-
         services = let
           antivirusPort = 15407;
           antispamPort = 11335;
@@ -300,8 +299,6 @@ in {
               useSystemd = true;
               configuration = {
                 imports = [ ./dovecot.nix ./postfix.nix ];
-
-                services.logrotate.checkConfig = false;
 
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -387,7 +384,6 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall.enable = false;
-                services.logrotate.checkConfig = false;
                 fudo.mail.dovecot = {
                   enable = true;
                   debug = cfg.debug;
@@ -439,7 +435,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                services.logrotate.checkConfig = false;
                 imports = [ ./rspamd.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -477,7 +472,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                services.logrotate.checkConfig = false;
                 imports = [ ./clamav.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -499,7 +493,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                services.logrotate.checkConfig = false;
                 imports = [ ./dkim.nix ];
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -526,7 +519,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                services.logrotate.checkConfig = false;
                 networking.firewall.enable = false;
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -549,7 +541,6 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                services.logrotate.checkConfig = false;
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall.enable = false;
