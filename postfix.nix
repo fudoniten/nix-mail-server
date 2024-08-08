@@ -521,10 +521,8 @@ in {
               "${policydSpfConfig}"
             ];
           };
-          stmp = {
-            command = "smtp -v";
-            maxproc = 10;
-          };
+          smtp = { args = "-v"; };
+          submission = { args = "-v"; };
           submission-header-cleanup = let
             submissionHeaderCleanupRules =
               pkgs.writeText "submission_header_cleanup_rules" ''
