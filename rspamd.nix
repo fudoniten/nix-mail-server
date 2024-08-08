@@ -6,6 +6,7 @@ with lib;
 let
   cfg = config.fudo.mail.rspamd;
   mailCfg = config.fudo.mail;
+  hostname = config.instance.hostname;
 
 in {
   options.fudo.mail.rspamd = with types; {
@@ -61,6 +62,7 @@ in {
       prometheus.exporters.rspamd = {
         enable = true;
         port = cfg.ports.metrics;
+        extraLabels = { host = hostname; };
       };
 
       rspamd = {

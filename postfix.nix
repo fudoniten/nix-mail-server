@@ -463,7 +463,7 @@ in {
 
           tls_random_source = "dev:/dev/urandom";
 
-          # maillog_file = mailLogFile;
+          maillog_file = mailLogFile;
           # maillog_file_permissions = "0640";
         };
 
