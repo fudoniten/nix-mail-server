@@ -269,7 +269,7 @@ in {
         mode = "400";
       };
 
-      systemPackages = with pkgs; [ dovecot_pigeonhole doveccot_fts_xapian ];
+      systemPackages = with pkgs; [ dovecot_pigeonhole dovecot_fts_xapian ];
     };
 
     services = {
