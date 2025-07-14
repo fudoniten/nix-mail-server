@@ -297,8 +297,6 @@ in {
         sslServerKey = cfg.ssl.private-key;
 
         mailboxes = cfg.mailboxes;
-
-        modules = with pkgs; [ dovecot_pigeonhole dovecot_fts_xapian ];
         protocols = [ "sieve" ];
 
         mailPlugins = {
