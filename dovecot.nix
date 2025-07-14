@@ -262,10 +262,14 @@ in {
       };
     };
 
-    environment.etc."dovecot/conf.d/admin.conf" = {
-      source = cfg.admin-conf;
-      user = config.services.dovecot2.user;
-      mode = "400";
+    environment = {
+      etc."dovecot/conf.d/admin.conf" = {
+        source = cfg.admin-conf;
+        user = config.services.dovecot2.user;
+        mode = "400";
+      };
+
+      systemPackages = with pkgs; [ dovecot_pigeonhole doveccot_fts_xapian ];
     };
 
     services = {
