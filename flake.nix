@@ -2,7 +2,7 @@
   description = "Mail server running in containers.";
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-23.11";
+    nixpkgs.url = "nixpkgs/nixos-25.05";
     arion.url = "github:hercules-ci/arion";
   };
 
