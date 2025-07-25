@@ -57,8 +57,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-    environment.etc."rspamd/custom.conf".text = "disable_hyperscan = true;";
-
     services = {
       prometheus.exporters.rspamd = {
         enable = true;
@@ -74,6 +72,9 @@ in {
         '';
 
         locals = {
+
+          "custom.conf".text = "disable_hyperscan = true;";
+
           "milter_headers.conf".text = "extended_spam_headers = yes;";
 
           "redis.conf".text = ''
