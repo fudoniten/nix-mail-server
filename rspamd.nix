@@ -67,16 +67,9 @@ in {
       rspamd = {
         enable = true;
 
-        extraConfig = ''
-          .include "$CONFDIR/options-local.inc"
-        '';
-
-        # Necessary because germany's CPU is old af
-        config."options-local.inc" = ''
-          disable_hyperscan = true;
-        '';
-
         locals = {
+          "disable-hyperscan.conf".text = "disable_hyperscan = true;";
+
           "milter_headers.conf".text = "extended_spam_headers = yes;";
 
           "redis.conf".text = ''
