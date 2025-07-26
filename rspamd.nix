@@ -68,7 +68,7 @@ in {
         enable = true;
 
         extraConfig = ''
-          .include "$LOCAL_CONFDIR/custom.conf"
+          .include "$LOCAL_CONFDIR/local.d/custom.conf"
         '';
 
         locals = {
