@@ -220,11 +220,52 @@ chown -R 5025:5025 /var/lib/mail/mail
 
 ### Monitoring
 
+#### Prometheus Metrics
+
 All services expose Prometheus metrics:
 
 - Postfix metrics: `:1725/metrics`
 - Dovecot metrics: `:5034/metrics`
 - Rspamd metrics: `:7573/metrics`
+
+#### Automated Health Checks
+
+This repository includes a **mail monitoring tool** that regularly tests your mail server's functionality:
+
+- ✅ IMAP authentication tests
+- ✅ SMTP authentication tests
+- ✅ End-to-end send/receive tests
+- ✅ Automatic ntfy.sh notifications on failures
+
+**See [MONITORING.md](MONITORING.md) for complete setup instructions.**
+
+Quick start - add to your monitoring host (not the mail server):
+```nix
+{
+  inputs.mail-server.url = "github:fudoniten/nix-mail-server";
+
+  outputs = { self, nixpkgs, mail-server, ... }: {
+    nixosConfigurations.monitor-host = nixpkgs.lib.nixosSystem {
+      modules = [
+        mail-server.nixosModules.mail-monitor
+        {
+          services.mail-monitor = {
+            enable = true;
+            interval = "15min";
+            smtp.host = "mail.example.com";
+            imap.host = "mail.example.com";
+            credentials = {
+              username = "monitor@example.com";
+              passwordFile = "/run/secrets/mail-monitor-password";
+            };
+            ntfy.topic = "mail-alerts";
+          };
+        }
+      ];
+    };
+  };
+}
+```
 
 ### Common Operations
 
