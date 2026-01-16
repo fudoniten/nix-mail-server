@@ -1,10 +1,62 @@
 { config, lib, pkgs, ... }@toplevel:
 
+# Mail Server Orchestration Module
+#
+# This is the main module that orchestrates all mail server components using
+# Arion for container-based deployment. It provides a complete, production-ready
+# email infrastructure with modern security and spam protection.
+#
+# ARCHITECTURE OVERVIEW:
+#
+# Container Structure:
+# ├── postfix       - SMTP server (send/receive email)
+# ├── dovecot       - IMAP/LMTP server (store/access email)
+# ├── rspamd        - Spam/virus filtering
+# ├── opendkim      - DKIM email signing
+# ├── clamav        - Antivirus scanning
+# └── redis         - Statistics and learning backend
+#
+# Network Topology:
+# - external-network: Internet-facing services (Postfix SMTP, Dovecot IMAP)
+# - internal-network: Inter-service communication
+# - redis-network: Redis backend access
+# - ldap-network: LDAP authentication (via Authentik)
+#
+# Data Flow:
+# 1. Incoming mail: Internet -> Postfix (25) -> Rspamd -> DKIM verify -> Dovecot (LMTP)
+# 2. Outgoing mail: Client -> Postfix (587/465) -> SASL auth -> Rspamd -> DKIM sign -> Internet
+# 3. Mail access: Client -> Dovecot (143/993) -> LDAP auth -> Maildir storage
+# 4. Spam learning: User actions -> Sieve scripts -> Rspamd -> Redis (Bayes update)
+#
+# Key Features:
+# - Multi-domain support with virtual mailboxes
+# - LDAP authentication via Authentik
+# - Comprehensive spam filtering (Rspamd + ClamAV)
+# - Email signing and verification (DKIM)
+# - Auto-learning spam detection (Bayes)
+# - Full-text search (Xapian)
+# - Prometheus metrics for all services
+# - Container isolation for security
+#
+# Security Model:
+# - Each service runs in isolated container with minimal capabilities
+# - Secrets managed via Nix (WARNING: stored in Nix store)
+# - TLS required for all client connections (submission/IMAP)
+# - SASL authentication via LDAP
+# - Multi-layer spam/abuse prevention
+# - Regular virus database updates
+#
+# TODO: Move secrets to runtime injection (systemd LoadCredential, etc.)
+
 with lib;
 let
   cfg = config.fudo.mail;
   hostname = config.instance.hostname;
   hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
+
+  # Auto-generated passwords for internal services
+  # WARNING: These are deterministic based on build-seed and stored in Nix store
+  # Consider migrating to runtime secret injection
   dovecotAdminPasswd =
     pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
     config.instance.build-seed;
@@ -164,7 +216,7 @@ in {
       hostname = mkOption {
         type = str;
         description =
-          "Hostname too use for the SMTP server. Must resolve to this host.";
+          "Hostname to use for the SMTP server. Must resolve to this host.";
         default = "smtp.${config.fudo.mail.primary-domain}";
       };
 
@@ -177,7 +229,7 @@ in {
       spf.enable = mkOption {
         type = bool;
         description =
-          "Enable Sender Polify Framework checking on incoming messages.";
+          "Enable Sender Policy Framework checking on incoming messages.";
         default = true;
       };
     };
@@ -186,7 +238,7 @@ in {
       hostname = mkOption {
         type = str;
         description =
-          "Hostname too use for the IMAP server. Must resolve to this host.";
+          "Hostname to use for the IMAP server. Must resolve to this host.";
         default = "imap.${config.fudo.mail.primary-domain}";
       };
 

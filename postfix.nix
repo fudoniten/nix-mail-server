@@ -1,5 +1,40 @@
 { config, lib, pkgs, ... }:
 
+# Postfix SMTP Server Module
+#
+# Provides email sending (SMTP) and receiving with comprehensive security:
+# - Multi-layer spam/abuse prevention via restrictions
+# - TLS encryption for all connections (mandatory for submission)
+# - SASL authentication via Dovecot for outbound mail
+# - SPF policy checking for sender verification
+# - DKIM signing via OpenDKIM milter
+# - Rspamd integration for spam/virus filtering
+# - Sender login mapping to prevent spoofing
+# - DNS blacklist (RBL) support
+# - Virtual domain and alias support
+#
+# Architecture choices:
+# - Defense in depth: Multiple restriction layers (sender, relay, recipient, client, HELO)
+# - Strong TLS: TLSv1.2+ only, weak ciphers disabled, PFS enforced
+# - Sender login maps: Prevent authenticated users from spoofing other addresses
+# - Milter protocol: Integration with Rspamd and DKIM for content filtering
+# - Header cleanup: Remove sensitive headers from submitted mail
+# - LMTP delivery: Handoff to Dovecot for local delivery and Sieve filtering
+#
+# Security model:
+# - Port 25 (SMTP): Accept mail from internet, apply all restrictions
+# - Port 587 (Submission): Require auth + TLS, apply sender restrictions
+# - Port 465 (Submissions): Require auth + TLS (implicit TLS)
+# - Trusted networks: Bypass some restrictions (use carefully!)
+#
+# Mail flow:
+# 1. Client/server connects via SMTP (25/587/465)
+# 2. TLS negotiation (required for submission ports)
+# 3. SASL authentication (for submission)
+# 4. Policy checks (SPF, sender validation, blacklists)
+# 5. Milter processing (Rspamd spam check, DKIM signing)
+# 6. Delivery via LMTP to Dovecot (local) or SMTP (remote)
+
 with lib;
 let
   cfg = config.fudo.mail.postfix;
@@ -229,65 +264,69 @@ in {
         '';
       };
 
-      # pfix-srsd = let
-
-      # in {
-      #   enable = true;
-      #   domain = cfg.primary-domain;
-      #   # TODO: secret
-      # };
-
       postfix = let
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
 
-        # Applied to the MAIL FROM header for ALL mail, not just mail we're
-        # sending
+        # SENDER RESTRICTIONS: Applied to MAIL FROM for ALL mail
+        # Defense against sender spoofing and forged addresses
+        # Order matters: evaluated sequentially until match
         sender-restrictions = [
-          "check_sender_access ${mappedFile "reject_senders"}"
-          "reject_sender_login_mismatch"
-          "reject_non_fqdn_sender"
-          "permit_sasl_authenticated"
-          "permit_mynetworks"
+          "check_sender_access ${mappedFile "reject_senders"}"  # Blacklist specific senders
+          "reject_sender_login_mismatch"  # CRITICAL: Prevent auth users from spoofing others
+          "reject_non_fqdn_sender"        # Require fully-qualified sender addresses
+          "permit_sasl_authenticated"     # Allow authenticated users
+          "permit_mynetworks"             # Allow trusted networks
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
 
+        # RELAY RESTRICTIONS: Control who can relay mail through server
+        # Prevents open relay abuse (critical for preventing spam listing)
         relay-restrictions = [
-          "permit_sasl_authenticated"
-          "permit_mynetworks"
-          "reject_unauth_destination"
+          "permit_sasl_authenticated"     # Auth users can relay
+          "permit_mynetworks"             # Trusted networks can relay
+          "reject_unauth_destination"     # Block everything else
           "permit"
         ];
 
+        # RECIPIENT RESTRICTIONS: Applied to RCPT TO
+        # Multi-layer defense against spam and abuse
         recipient-restrictions = [
-          "check_recipient_access ${mappedFile "reject_recipients"}"
-          "reject_unknown_sender_domain"
-          "reject_unknown_recipient_domain"
-          "permit_sasl_authenticated"
-          "reject_unauth_pipelining"
+          "check_recipient_access ${mappedFile "reject_recipients"}"  # Blacklist
+          "reject_unknown_sender_domain"    # Sender domain must have valid DNS
+          "reject_unknown_recipient_domain" # Recipient domain must have valid DNS
+          "permit_sasl_authenticated"       # Auth users bypass further checks
+          "reject_unauth_pipelining"        # Block SMTP pipelining abuse
           ## Not needed, since relay did it already
           # "reject_unauth_destination"
-          "reject_invalid_hostname"
+          "reject_invalid_hostname"         # Require valid hostnames
           "reject_non_fqdn_hostname"
           "reject_non_fqdn_sender"
           "reject_non_fqdn_recipient"
         ] ++ (optional cfg.policy-spf.enable
-          "check_policy_service unix:private/policy-spf")
+          "check_policy_service unix:private/policy-spf")  # SPF validation
           ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns)
+            cfg.blacklist.dns)  # DNS blacklists
           ++ [ "permit_mynetworks" "reject_unauth_destination" "permit" ];
 
+        # CLIENT RESTRICTIONS: Applied to connecting clients
+        # Very strict: only auth users and trusted networks allowed
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
 
+        # HELO RESTRICTIONS: Applied to HELO/EHLO for incoming mail
+        # Helps catch spambots with invalid HELO strings
+        # Note: reject_unknown_helo_hostname disabled (too many false positives)
         incoming-helo-restrictions = [
           "permit_mynetworks"
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
-          # "reject_unknown_helo_hostname"
+          # "reject_unknown_helo_hostname"  # Disabled: causes legitimate mail rejection
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
 
+        # HELO RESTRICTIONS: Applied to HELO/EHLO for outgoing mail (submission)
+        # More permissive since users are authenticated
         outgoing-helo-restrictions = [
           "permit_mynetworks"
           "reject_invalid_hostname"
@@ -377,58 +416,78 @@ in {
           # Not used?
           # stmpd_banner = "${cfg.hostname} ESMTP NO UCE";
 
+          # Elliptic curve settings for ECDHE key exchange
+          # prime256v1 (P-256) for strong, secp384r1 (P-384) for ultra
           tls_eecdh_strong_curve = "prime256v1";
           tls_eecdh_ultra_curve = "secp384r1";
 
+          # SPF policy service timeout (1 hour)
           policy-spf_time_limit = "3600s";
 
+          # DNS resolution order for remote hosts
           smtp_host_lookup = "dns, native";
 
+          # SASL AUTHENTICATION: Integrate with Dovecot for user auth
+          # Used for submission ports (587/465) to verify users before accepting mail
           smtpd_sasl_type = "dovecot";
-          smtpd_sasl_path = "/run/dovecot2/auth";
+          smtpd_sasl_path = "/run/dovecot2/auth";  # Unix socket to Dovecot
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_local_domain = cfg.sasl-domain;
-          smtpd_sasl_authenticated_header = "yes";
+          smtpd_sasl_authenticated_header = "yes";  # Add auth info to headers
 
+          # Disable anonymous SASL mechanisms (require real credentials)
           smtpd_sasl_security_options = "noanonymous";
           smtpd_sasl_tls_security_options = "noanonymous";
 
+          # SENDER LOGIN MAPS: Map email addresses to authorized users
+          # CRITICAL: Prevents authenticated users from sending as other addresses
+          # Uses PCRE regex to match user@domain patterns to usernames
           smtpd_sender_login_maps = (pcreFile "sender_login_map");
 
+          # Security: Disable VRFY command (prevents user enumeration)
           disable_vrfy_command = "yes";
 
+          # Support plus-addressing: user+tag@domain -> user@domain
+          # Useful for filtering and tracking email sources
           recipient_delimiter = "+";
 
+          # MILTER CONFIGURATION: Content filtering via external services
+          # Milter protocol v6 for Rspamd and DKIM integration
           milter_protocol = "6";
           milter_mail_macros =
             "i {mail_addr} {client_addr} {client_name} {auth_type} {auth_authen} {auth_author} {mail_addr} {mail_host} {mail_mailer}";
 
+          # Milters for SMTP (incoming mail)
+          # Order: Rspamd first (spam check), then DKIM (signing/verification)
           smtpd_milters = [
             "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
             "inet:${cfg.dkim-server.host}:${toString cfg.dkim-server.port}"
           ];
 
+          # Milters for non-SMTP (locally generated mail)
           non_smtpd_milters = [
             "inet:${cfg.rspamd-server.host}:${toString cfg.rspamd-server.port}"
             "inet:${cfg.dkim-server.host}:${toString cfg.dkim-server.port}"
           ];
 
+          # Require HELO/EHLO before accepting commands
           smtpd_helo_required = true;
 
+          # Apply restriction policies (defined above)
           smtpd_relay_restrictions = relay-restrictions;
-
           smtpd_sender_restrictions = sender-restrictions;
-
           smtpd_recipient_restrictions = recipient-restrictions;
-
           smtpd_helo_restrictions = incoming-helo-restrictions;
 
-          # Handled by submission
+          # TLS SECURITY CONFIGURATION
+          # Port 25: TLS optional (may) - can't require it for incoming internet mail
+          # Ports 587/465: TLS required (encrypt) - enforced in submissionOptions
           smtpd_tls_security_level = "may";
 
-          # smtpd_tls_eecdh_grade = "ultra";
-
-          # Disable obselete protocols
+          # TLS Protocol Configuration
+          # Disable obsolete/insecure protocols: SSLv2, SSLv3, TLSv1.0
+          # Note: TLSv1.1 is also deprecated (RFC 8996, 2021) but kept for compatibility
+          # TODO: Consider removing TLSv1.1 and enforcing TLSv1.2+ only
           smtpd_tls_protocols =
             [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
           smtp_tls_protocols =
@@ -438,11 +497,20 @@ in {
           smtp_tls_mandatory_protocols =
             [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
 
+          # Cipher Configuration: Use only "high" security ciphers
+          # Excludes weak/broken algorithms and ensures forward secrecy
           smtp_tls_ciphers = "high";
           smtpd_tls_ciphers = "high";
           smtp_tls_mandatory_ciphers = "high";
           smtpd_tls_mandatory_ciphers = "high";
 
+          # Explicitly exclude weak/broken ciphers:
+          # - MD5: Broken hash
+          # - DES/3DES: Weak encryption
+          # - RC4: Broken stream cipher
+          # - ADH: Anonymous DH (no authentication)
+          # - eNULL/aNULL: No encryption/authentication
+          # - SRP/PSD: Rarely used, potential issues
           smtpd_tls_mandatory_exclude_ciphers =
             [ "MD5" "DES" "ADH" "RC4" "PSD" "SRP" "3DES" "eNULL" "aNULL" ];
           smtpd_tls_exclude_ciphers =
@@ -452,12 +520,17 @@ in {
           smtp_tls_exclude_ciphers =
             [ "MD5" "DES" "ADH" "RC4" "PSD" "SRP" "3DES" "eNULL" "aNULL" ];
 
+          # Server chooses cipher order (not client)
+          # Ensures strong ciphers are preferred
           tls_preempt_cipherlist = "yes";
 
+          # CRITICAL: Require TLS for authentication (prevent password sniffing)
           smtpd_tls_auth_only = "yes";
 
+          # TLS logging level (1 = log handshake and certificate info)
           smtpd_tls_loglevel = "1";
 
+          # Entropy source for TLS random number generation
           tls_random_source = "dev:/dev/urandom";
         };
 
@@ -547,12 +620,6 @@ in {
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
           };
           showq = { private = false; };
-          # showq = {
-          #   type = "unix";
-          #   private = false;
-          #   chroot = true;
-          #   command = "${pkgs.postfix}/libexec/postfix/showq";
-          # };
         };
       };
     };

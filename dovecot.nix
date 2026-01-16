@@ -1,5 +1,36 @@
 { config, lib, pkgs, ... }:
 
+# Dovecot IMAP/LMTP Server Module
+#
+# Provides email delivery and access via IMAP with advanced features:
+# - LMTP for local mail delivery from Postfix
+# - IMAP/IMAPS for mail client access
+# - Full-text search via Xapian (FTS)
+# - Sieve filtering for server-side mail rules
+# - LDAP authentication via Authentik
+# - Automatic spam learning integration with Rspamd
+# - Maildir++ storage format with virtual mailboxes
+#
+# Architecture choices:
+# - Maildir++ format for reliability and compatibility
+# - Xapian for full-text search (lighter than Solr, faster than built-in)
+# - Sieve for filtering (spam learning, folder sorting, etc.)
+# - LDAP auth for centralized user management
+# - Virtual plugin for alias handling
+# - Quota support disabled (can be enabled per-user if needed)
+#
+# Mail flow:
+# 1. Postfix accepts mail via SMTP
+# 2. Mail passes through Rspamd for spam/virus checking
+# 3. Postfix delivers to Dovecot via LMTP
+# 4. Dovecot applies Sieve filters (spam learning, sorting)
+# 5. Mail stored in Maildir format
+# 6. Users access via IMAP
+#
+# Spam learning flow:
+# - User moves spam to Junk folder -> ham.sieve -> rspamc learn_spam
+# - User moves ham from Junk -> spam.sieve -> rspamc learn_ham
+
 with lib;
 let
   cfg = config.fudo.mail.dovecot;
@@ -185,12 +216,16 @@ in {
   };
 
   config = mkIf cfg.enable {
+    # User and group for mail storage
+    # IMPORTANT: Hardcoded UID/GID 5025 for consistency across systems
+    # This ensures mail file ownership remains stable when sharing storage
+    # or restoring from backups. Document this requirement for deployments.
     users = {
       users = {
         "${cfg.mail-user}" = {
           isSystemUser = true;
           group = cfg.mail-group;
-          uid = 5025;
+          uid = 5025; # Hardcoded for cross-system consistency
         };
         "${cfg.metrics.user}" = {
           isSystemUser = true;
@@ -200,65 +235,29 @@ in {
       groups = {
         "${cfg.mail-group}" = {
           members = [ cfg.mail-user ];
-          gid = 5025;
+          gid = 5025; # Hardcoded for cross-system consistency
         };
         "${cfg.metrics.group}".members = [ cfg.metrics.user ];
       };
     };
 
     systemd = {
+      # Directory structure:
+      # - state-directory: Dovecot runtime state, indexes, Sieve scripts
+      # - mail-directory: Actual mail storage (Maildir format)
+      # - sieves: Compiled Sieve scripts for filtering
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0711 root root - -"
         "d ${cfg.mail-directory}         0750 ${cfg.mail-user} ${cfg.mail-group} - -"
         "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
       ];
 
+      # Prometheus exporter must start after Dovecot is ready
       services = {
         prometheus-dovecot-exporter = {
           requires = [ "dovecot2.service" ];
           after = [ "dovecot2.service" ];
         };
-
-        # dovecot-sieve-generator = let
-        #   isRegularFile = _: type: type == "regular";
-        #   sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
-        #   headOrNull = lst: if lst == [ ] then null else head lst;
-        #   stripExt = ext: filename:
-        #     headOrNull (builtins.match "(.+)[.]${ext}$" filename);
-        #   compileFile = filename: _:
-        #     let
-        #       filePath = ./sieves + "/${filename}";
-        #       fileBaseName = stripExt "sieve" filename;
-        #     in ''
-        #       if [ -f "${sieveDirectory}/${fileBaseName}.sieve" ]; then
-        #         rm "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-        #       fi
-        #       cp ${filePath} "${sieveDirectory}/${fileBaseName}.sieve"
-        #       sievec "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-        #       chmod u+w "${sieveDirectory}/${fileBaseName}.sieve"
-        #     '';
-        # in {
-        #   wantedBy = [ "dovecot2.service" ];
-        #   after = [ "dovecot2.service" ];
-        #   path = with pkgs; [ dovecot_pigeonhole ];
-        #   serviceConfig = {
-        #     User = config.services.dovecot2.user;
-        #     ReadWritePaths = [ sieveDirectory "/run/dovecot2" ];
-        #     ExecStart = pkgs.writeShellScript "generate-sieves.sh"
-        #       (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
-        #     PrivateDevices = true;
-        #     PrivateTmp = true;
-        #     PrivateMounts = true;
-        #     ProtectControlGroups = true;
-        #     ProtectKernelTunables = true;
-        #     ProtectKernelModules = true;
-        #     ProtectSystem = true;
-        #     ProtectHome = true;
-        #     ProtectClock = true;
-        #     ProtectKernelLogs = true;
-        #     Type = "oneshot";
-        #   };
-        # };
       };
     };
 
@@ -386,7 +385,7 @@ in {
           };
 
           mailUserUid = config.users.users."${cfg.mail-user}".uid;
-          mailUserGid = config.users.group."${cfg.mail-group}".gid;
+          mailUserGid = config.users.groups."${cfg.mail-group}".gid;
         in ''
           ## Extra Config
 
