@@ -218,47 +218,6 @@ in {
           requires = [ "dovecot2.service" ];
           after = [ "dovecot2.service" ];
         };
-
-        # dovecot-sieve-generator = let
-        #   isRegularFile = _: type: type == "regular";
-        #   sieves = filterAttrs isRegularFile (builtins.readDir ./sieves);
-        #   headOrNull = lst: if lst == [ ] then null else head lst;
-        #   stripExt = ext: filename:
-        #     headOrNull (builtins.match "(.+)[.]${ext}$" filename);
-        #   compileFile = filename: _:
-        #     let
-        #       filePath = ./sieves + "/${filename}";
-        #       fileBaseName = stripExt "sieve" filename;
-        #     in ''
-        #       if [ -f "${sieveDirectory}/${fileBaseName}.sieve" ]; then
-        #         rm "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-        #       fi
-        #       cp ${filePath} "${sieveDirectory}/${fileBaseName}.sieve"
-        #       sievec "${sieveDirectory}/${fileBaseName}.sieve" "${sieveDirectory}/${fileBaseName}.svbin"
-        #       chmod u+w "${sieveDirectory}/${fileBaseName}.sieve"
-        #     '';
-        # in {
-        #   wantedBy = [ "dovecot2.service" ];
-        #   after = [ "dovecot2.service" ];
-        #   path = with pkgs; [ dovecot_pigeonhole ];
-        #   serviceConfig = {
-        #     User = config.services.dovecot2.user;
-        #     ReadWritePaths = [ sieveDirectory "/run/dovecot2" ];
-        #     ExecStart = pkgs.writeShellScript "generate-sieves.sh"
-        #       (concatStringsSep "\n" (mapAttrsToList compileFile sieves));
-        #     PrivateDevices = true;
-        #     PrivateTmp = true;
-        #     PrivateMounts = true;
-        #     ProtectControlGroups = true;
-        #     ProtectKernelTunables = true;
-        #     ProtectKernelModules = true;
-        #     ProtectSystem = true;
-        #     ProtectHome = true;
-        #     ProtectClock = true;
-        #     ProtectKernelLogs = true;
-        #     Type = "oneshot";
-        #   };
-        # };
       };
     };
 
@@ -386,7 +345,7 @@ in {
           };
 
           mailUserUid = config.users.users."${cfg.mail-user}".uid;
-          mailUserGid = config.users.group."${cfg.mail-group}".gid;
+          mailUserGid = config.users.groups."${cfg.mail-group}".gid;
         in ''
           ## Extra Config
 

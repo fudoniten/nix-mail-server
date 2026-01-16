@@ -229,14 +229,6 @@ in {
         '';
       };
 
-      # pfix-srsd = let
-
-      # in {
-      #   enable = true;
-      #   domain = cfg.primary-domain;
-      #   # TODO: secret
-      # };
-
       postfix = let
         pcreFile = name: "pcre:/var/lib/postfix/conf/${name}";
         mappedFile = name: "hash:/var/lib/postfix/conf/${name}";
@@ -547,12 +539,6 @@ in {
               [ "-o" "header_checks=pcre:${submissionHeaderCleanupRules}" ];
           };
           showq = { private = false; };
-          # showq = {
-          #   type = "unix";
-          #   private = false;
-          #   chroot = true;
-          #   command = "${pkgs.postfix}/libexec/postfix/showq";
-          # };
         };
       };
     };

@@ -5,7 +5,6 @@
 with lib;
 let
   cfg = config.fudo.mail.rspamd;
-  mailCfg = config.fudo.mail;
 
 in {
   options.fudo.mail.rspamd = with types; {

@@ -164,7 +164,7 @@ in {
       hostname = mkOption {
         type = str;
         description =
-          "Hostname too use for the SMTP server. Must resolve to this host.";
+          "Hostname to use for the SMTP server. Must resolve to this host.";
         default = "smtp.${config.fudo.mail.primary-domain}";
       };
 
@@ -177,7 +177,7 @@ in {
       spf.enable = mkOption {
         type = bool;
         description =
-          "Enable Sender Polify Framework checking on incoming messages.";
+          "Enable Sender Policy Framework checking on incoming messages.";
         default = true;
       };
     };
@@ -186,7 +186,7 @@ in {
       hostname = mkOption {
         type = str;
         description =
-          "Hostname too use for the IMAP server. Must resolve to this host.";
+          "Hostname to use for the IMAP server. Must resolve to this host.";
         default = "imap.${config.fudo.mail.primary-domain}";
       };
 
