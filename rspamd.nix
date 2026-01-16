@@ -1,6 +1,31 @@
 { config, lib, pkgs, ... }:
 
-# TODO: use blacklists
+# Rspamd Spam Filtering Module
+#
+# Provides advanced spam and malware detection using multiple techniques:
+# - Bayesian spam classification with auto-learning
+# - DNS blacklist (RBL/DNSBL) checking via SURBL/URIBL
+# - SPF/DKIM/DMARC validation
+# - Virus scanning via ClamAV integration
+# - Greylisting capabilities (when enabled)
+# - Neural network classification
+# - Phishing detection and URL analysis
+# - Sender/IP reputation scoring
+#
+# Architecture choices:
+# - Redis backend for statistics and fuzzy hashes (fast, scalable)
+# - Hyperscan disabled (CPU-intensive, problematic on older hardware)
+# - Auto-learning via Sieve scripts (ham.sieve/spam.sieve in Dovecot)
+# - Milter integration with Postfix for real-time filtering
+# - ClamAV rejects infected mail immediately (no quarantine)
+# - MX validation checks sender domains have valid mail servers
+#
+# Performance note: Hyperscan can provide faster regex matching but requires
+# modern CPU with SSE4.2 support and uses significant memory. It's disabled
+# here because current mail servers run on older hardware without the required
+# CPU instructions. Can be re-enabled after hardware upgrade.
+#
+# TODO: Add support for custom DNS blacklists configuration
 
 with lib;
 let
@@ -57,6 +82,7 @@ in {
 
   config = mkIf cfg.enable {
     services = {
+      # Prometheus exporter for monitoring spam filtering metrics
       prometheus.exporters.rspamd = {
         enable = true;
         port = cfg.ports.metrics;
@@ -66,21 +92,33 @@ in {
       rspamd = {
         enable = true;
 
+        # Include custom configuration for settings not covered by NixOS options
         extraConfig = ''
           .include "$LOCAL_CONFDIR/local.d/custom.conf"
         '';
 
         locals = {
 
+          # Disable hyperscan due to old server hardware lacking required CPU instructions
+          # Hyperscan requires SSE4.2 support - can re-enable after hardware upgrade
           "custom.conf".text = "disable_hyperscan = true;";
 
+          # Add detailed spam headers to help with debugging and filtering
+          # Headers include scores, symbols matched, and individual test results
           "milter_headers.conf".text = "extended_spam_headers = yes;";
 
+          # Redis for Bayes statistics, neural network, and reputation data
+          # Redis provides fast, persistent storage for learning and scoring
+          # WARNING: Password is embedded in Nix store (world-readable)
+          # TODO: Use runtime secret injection instead
           "redis.conf".text = ''
             servers = "${cfg.redis.host}:${toString cfg.redis.port}";
             password = "${cfg.redis.password}";
           '';
 
+          # ClamAV integration for virus scanning
+          # Action: reject - infected mail is rejected at SMTP time
+          # scan_mime_parts: false - scan entire message as one unit for better detection
           "antivirus.conf".text = ''
             clamav {
               action = "reject";
@@ -92,6 +130,9 @@ in {
             }
           '';
 
+          # Neural network for spam detection (requires training data in Redis)
+          # Learns patterns from ham/spam classifications over time
+          # Higher weights mean stronger signal (3.0 spam, -3.0 ham)
           "neural.conf".text = ''
             symbols = {
               "NEURAL_SPAM" = {
@@ -105,6 +146,9 @@ in {
             }
           '';
 
+          # MX Check: Verify sender domains have valid mail servers
+          # Helps catch forged/spoofed sender addresses
+          # Excludes freemail/disposable providers (they have special handling)
           "mx_check.conf".text = ''
             enabled = true;
 
@@ -116,6 +160,9 @@ in {
             ];
           '';
 
+          # Reputation scoring based on historical data
+          # Tracks IP, SPF, DKIM, and generic reputation in Redis
+          # Improves scoring accuracy over time as data accumulates
           "reputation.conf".text = ''
             rules {
               ip_reputation = {
@@ -158,7 +205,14 @@ in {
             ];
           '';
 
-          # SURBL checks URLs in emails against known-bad urls
+          # SURBL/URIBL: DNS-based blacklists for URLs in email
+          # Checks all URLs (including those in email addresses and DKIM signatures)
+          # against multiple reputation databases:
+          # - SURBL: Spam URLs
+          # - URIBL: Malicious URLs
+          # - DBL (Spamhaus): Domain blacklist for spam/phish/malware
+          # - RSPAMD_URIBL: Rspamd's own URL reputation database
+          # - SEM_URIBL: SpamEatingMonkey URL blacklist
           "rbl.conf".text = ''
             surbl {
               rules {
@@ -263,7 +317,11 @@ in {
 
         overrides."milter_headers.conf".text = "extended_spam_headers = true;";
 
+        # Worker processes for handling different types of requests
         workers = {
+          # Proxy worker: Handles milter protocol for Postfix integration
+          # Receives mail from Postfix, scans it, returns verdict
+          # 4 workers for parallel processing of incoming mail
           rspamd_proxy = {
             type = "rspamd_proxy";
             bindSockets = [ "*:${toString cfg.ports.milter}" ];
@@ -279,6 +337,8 @@ in {
             '';
           };
 
+          # Controller worker: Provides web UI and API for management
+          # Used for training, statistics viewing, and configuration
           controller = {
             type = "controller";
             count = 4;
