@@ -162,6 +162,28 @@ in {
       default = [ ];
     };
 
+    fail2ban = {
+      enable = mkEnableOption "Enable fail2ban for brute force protection.";
+
+      bantime = mkOption {
+        type = int;
+        description = "Ban duration in seconds.";
+        default = 3600;  # 1 hour
+      };
+
+      maxretry = mkOption {
+        type = int;
+        description = "Number of failures before banning.";
+        default = 5;
+      };
+
+      findtime = mkOption {
+        type = int;
+        description = "Time window in seconds to count failures.";
+        default = 600;  # 10 minutes
+      };
+    };
+
     ldap = {
       authentik-host = mkOption {
         type = str;
@@ -285,6 +307,24 @@ in {
         target-file = "/run/mail-server/dovecot-secrets/ldap.conf";
       };
 
+      postfixLdapRecipients = {
+        source-file = pkgs.writeText "postfix-ldap-recipients.cf"
+          (concatStringsSep "\n" [
+            "server_host = ldap-proxy"
+            "server_port = 3389"
+            "version = 3"
+            "bind = yes"
+            "bind_dn = ${cfg.ldap.bind-dn}"
+            "bind_pw = ${readFile cfg.ldap.bind-password-file}"
+            "search_base = ${cfg.ldap.user-ou},${cfg.ldap.base}"
+            "scope = sub"
+            "query_filter = (&(objectClass=organizationalPerson)(cn=%u))"
+            "result_attribute = cn"
+            "result_format = OK"
+          ]);
+        target-file = "/run/mail-server/postfix-secrets/ldap-recipients.cf";
+      };
+
       dovecotAdminConfig = {
         source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
           ([ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
@@ -308,6 +348,34 @@ in {
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
     ];
+
+    # Fail2ban configuration for brute force protection
+    services.fail2ban = mkIf cfg.fail2ban.enable {
+      enable = true;
+      maxretry = cfg.fail2ban.maxretry;
+      bantime = "${toString cfg.fail2ban.bantime}";
+      findtime = "${toString cfg.fail2ban.findtime}";
+
+      jails = {
+        # Postfix SMTP authentication failures
+        postfix-sasl = ''
+          enabled = true
+          filter = postfix-sasl
+          port = smtp,submission,submissions
+          logpath = /var/log/journal
+          backend = systemd
+        '';
+
+        # Dovecot IMAP/POP3 authentication failures
+        dovecot = ''
+          enabled = true
+          filter = dovecot
+          port = imap,imaps,pop3,pop3s
+          logpath = /var/log/journal
+          backend = systemd
+        '';
+      };
+    };
 
     virtualisation.arion.projects.mail-server.settings = let
 
@@ -342,6 +410,7 @@ in {
               capabilities.SYS_ADMIN = true;
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${hostSecrets.postfixLdapRecipients.target-file}:/etc/postfix/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
@@ -405,6 +474,7 @@ in {
                     port = dkimPort;
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
+                  ldap-recipient-maps = "/etc/postfix/ldap-recipients.cf";
                 };
               };
             };

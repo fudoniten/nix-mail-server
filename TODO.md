@@ -1,5 +1,19 @@
 # TODO & Improvements
 
+## Recently Fixed Issues ✅
+
+### Critical Bug: Group Aliases Malformed [FIXED]
+
+**Status: FIXED** - The `mkAliasUsers` function in `postfix.nix` was generating invalid virtual alias entries.
+
+**Bug**: Line 397 used bare usernames instead of full email addresses for group alias recipients.
+
+**Impact**: Group aliases (e.g., `support@domain` → multiple users) would fail to deliver because Postfix expected full email addresses for virtual mailbox delivery.
+
+**Fix**: Changed `concatStringsSep "," users` to `userList users` to properly format recipient addresses.
+
+---
+
 ## Critical Security Issues
 
 ### 1. Secrets in Nix Store [CRITICAL]
@@ -36,11 +50,13 @@ systemd.services.rspamd.serviceConfig.LoadCredential = "redis-password:/secrets/
 
 ---
 
-### 2. No Intrusion Prevention System
+### 2. No Intrusion Prevention System [COMPLETED ✅]
 
 **Priority: HIGH**
 
-No fail2ban or similar IPS configured. Mail servers are constantly attacked with brute force attempts on:
+**Status: COMPLETED** - fail2ban is now configured with jails for Postfix SASL and Dovecot authentication.
+
+Previously: No fail2ban or similar IPS configured. Mail servers are constantly attacked with brute force attempts on:
 - SMTP AUTH (ports 587, 465)
 - IMAP/IMAPS (ports 143, 993)
 - Dovecot admin interface
@@ -78,11 +94,13 @@ services.fail2ban = {
 
 ---
 
-### 3. No DMARC Support
+### 3. No DMARC Support [COMPLETED ✅]
 
 **Priority: MEDIUM-HIGH**
 
-SPF and DKIM are configured, but DMARC checking is missing. DMARC provides:
+**Status: COMPLETED** - DMARC checking is now enabled in rspamd with reporting capabilities.
+
+Previously: SPF and DKIM are configured, but DMARC checking is missing. DMARC provides:
 - Policy enforcement for SPF/DKIM alignment
 - Reporting on authentication failures
 - Better protection against spoofing
@@ -247,11 +265,13 @@ services.prometheus.rules = [{
 
 ## Missing Features
 
-### 7. No Rate Limiting
+### 7. No Rate Limiting [COMPLETED ✅]
 
 **Priority: MEDIUM-HIGH**
 
-No outbound email rate limiting configured.
+**Status: COMPLETED** - Rate limiting now configured for messages, recipients, and connections per hour.
+
+Previously: No outbound email rate limiting configured.
 
 **Impact**: If account is compromised, could be used to send spam rapidly, getting the server blacklisted.
 
@@ -299,11 +319,13 @@ Rspamd supports greylisting but it's not enabled. Greylisting is effective again
 
 ---
 
-### 9. No Recipient Validation
+### 9. No Recipient Validation [COMPLETED ✅]
 
 **Priority**: MEDIUM
 
-Currently accepts mail for non-existent users, then bounces. Better to reject at SMTP time.
+**Status: COMPLETED** - LDAP recipient validation now configured. Postfix queries LDAP before accepting mail.
+
+Previously: Currently accepts mail for non-existent users, then bounces. Better to reject at SMTP time.
 
 **Impact**:
 - Backscatter (bouncing spam to forged senders)
@@ -322,11 +344,13 @@ local_recipient_maps = "ldap:/etc/postfix/ldap-recipients.cf";
 
 ---
 
-### 10. No Mail Quotas
+### 10. No Mail Quotas [COMPLETED ✅]
 
 **Priority**: LOW-MEDIUM
 
-No per-user quotas configured. Users can fill disk with mail.
+**Status: COMPLETED** - Mailbox quotas now configured with 10G default limit and 90% warning threshold.
+
+Previously: No per-user quotas configured. Users can fill disk with mail.
 
 **Solution**:
 ```nix
@@ -371,11 +395,13 @@ fudo.mail.smtp.ssl-directory = "/var/lib/acme/mail.example.com";
 
 ## Code Quality Issues
 
-### 12. TLSv1.1 Deprecation
+### 12. TLSv1.1 Deprecation [COMPLETED ✅]
 
 **Priority**: LOW
 
-TLSv1.1 is deprecated (RFC 8996, 2021) but still enabled for compatibility.
+**Status: COMPLETED** - TLSv1.1 disabled in both Postfix and Dovecot. TLSv1.2+ only.
+
+Previously: TLSv1.1 is deprecated (RFC 8996, 2021) but still enabled for compatibility.
 
 **Files**: `postfix.nix:490-498`
 
