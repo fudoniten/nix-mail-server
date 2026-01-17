@@ -163,7 +163,7 @@ in {
     };
 
     fail2ban = {
-      enable = mkEnableOption "Enable fail2ban for brute force protection.";
+      enable = mkEnableOption "Enable fail2ban for brute force protection." // { default = true; };
 
       bantime = mkOption {
         type = int;
