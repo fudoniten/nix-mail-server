@@ -160,6 +160,31 @@ in {
             ];
           '';
 
+          # DMARC policy checking and reporting
+          # Validates sender authentication (SPF + DKIM alignment)
+          # Applies domain's published DMARC policy (none/quarantine/reject)
+          # Stores results in Redis for aggregate report generation
+          "dmarc.conf".text = ''
+            # Enable DMARC checking
+            enabled = true;
+
+            # Report to domain owners (aggregate reports)
+            reporting = {
+              enabled = true;
+              email = "postmaster@localhost";
+              # org_name = "Your Organization";
+              # domain = "example.com";
+            };
+
+            # Actions based on DMARC policy
+            # These override the domain's policy for testing
+            # Comment out to use domain's published policy
+            # actions = {
+            #   quarantine = "add_header";
+            #   reject = "reject";
+            # };
+          '';
+
           # Reputation scoring based on historical data
           # Tracks IP, SPF, DKIM, and generic reputation in Redis
           # Improves scoring accuracy over time as data accumulates
@@ -179,6 +204,11 @@ in {
                 selector "dkim" {
                 }
                 symbol = "DKIM_REPUTATION"; # Also adjusts scores for DKIM_ALLOW, DKIM_REJECT
+              }
+              dmarc_reputation = {
+                selector "dmarc" {
+                }
+                symbol = "DMARC_REPUTATION";
               }
               generic_reputation =  {
                 selector "generic" {

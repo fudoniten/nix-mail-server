@@ -110,6 +110,22 @@ in {
       };
     };
 
+    quota = {
+      enable = mkEnableOption "Enable mailbox quotas." // { default = true; };
+
+      limit = mkOption {
+        type = str;
+        description = "Default quota limit per user (e.g., '10G', '1000M').";
+        default = "10G";
+      };
+
+      warning-threshold = mkOption {
+        type = int;
+        description = "Percentage at which to warn users (0-100).";
+        default = 90;
+      };
+    };
+
     metrics = {
       user = mkOption {
         type = str;
@@ -299,10 +315,13 @@ in {
         protocols = [ "sieve" ];
 
         mailPlugins = {
-          globally.enable = [ "old_stats" "fts" "fts_xapian" ];
+          globally.enable = [ "old_stats" "fts" "fts_xapian" ]
+            ++ (optional cfg.quota.enable "quota");
           perProtocol = {
-            imap.enable = [ "imap_sieve" "fts" "fts_xapian" ];
-            lmtp.enable = [ "sieve" "fts" "fts_xapian" ];
+            imap.enable = [ "imap_sieve" "fts" "fts_xapian" ]
+              ++ (optional cfg.quota.enable "imap_quota");
+            lmtp.enable = [ "sieve" "fts" "fts_xapian" ]
+              ++ (optional cfg.quota.enable "quota");
           };
         };
 
@@ -397,6 +416,12 @@ in {
             verbose_ssl = yes
           ''}
 
+          # SSL/TLS Configuration: TLSv1.2+ only (RFC 8996, 2021)
+          # TLSv1.1 and earlier are deprecated and disabled for security
+          ssl_min_protocol = TLSv1.2
+          ssl_cipher_list = HIGH:!aNULL:!MD5:!RC4:!3DES
+          ssl_prefer_server_ciphers = yes
+
           plugin {
             fts = xapian
             fts_xapian = partial=3 full=20 ${
@@ -407,6 +432,17 @@ in {
             fts_autoindex_exclude = \Trash
             fts_autoindex_exclude = \Junk
             fts_decoder = decode2text
+
+            ${optionalString cfg.quota.enable ''
+              # Quota configuration
+              quota = maildir:User quota
+              quota_rule = *:storage=${cfg.quota.limit}
+              quota_rule2 = Trash:storage=+1G
+              quota_warning = storage=${toString cfg.quota.warning-threshold}%% quota-warning ${toString cfg.quota.warning-threshold} %u
+              quota_status_success = DUNNO
+              quota_status_nouser = DUNNO
+              quota_status_overquota = "552 5.2.2 Mailbox is full"
+            ''}
           }
 
           service indexer-worker {

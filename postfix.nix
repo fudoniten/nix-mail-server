@@ -161,6 +161,22 @@ in {
       default = 200;
     };
 
+    rate-limit = {
+      enable = mkEnableOption "Enable rate limiting for outbound mail." // { default = true; };
+
+      message-rate-limit = mkOption {
+        type = int;
+        description = "Maximum messages per hour per authenticated user.";
+        default = 100;
+      };
+
+      recipient-rate-limit = mkOption {
+        type = int;
+        description = "Maximum recipients per hour per authenticated user.";
+        default = 200;
+      };
+    };
+
     ports = {
       metrics = mkOption {
         type = port;
@@ -172,6 +188,12 @@ in {
     ldap-conf = mkOption {
       type = str;
       description = "Path to LDAP dovecot2 configuration.";
+    };
+
+    ldap-recipient-maps = mkOption {
+      type = nullOr str;
+      description = "Path to Postfix LDAP recipient maps configuration. If null, uses catch-all.";
+      default = null;
     };
 
     rspamd-server = {
@@ -394,7 +416,7 @@ in {
               userList = users:
                 concatStringsSep "," (map (mkEmail cfg.domain) users);
             in concatMapAttrsToList (alias: users:
-              let userEmails = concatStringsSep "," users;
+              let userEmails = userList users;
               in map (domain: "${mkEmail domain alias}  ${userEmails}")
               domains);
         in concatStringsSep "\n" ((mkUserAliases cfg.aliases.user-aliases)
@@ -405,13 +427,35 @@ in {
 
         config = {
           virtual_mailbox_domains = allDomains;
-          virtual_mailbox_maps = mappedFile "virtual_mailbox_map";
+          virtual_mailbox_maps =
+            if cfg.ldap-recipient-maps != null
+            then "ldap:${cfg.ldap-recipient-maps}, ${mappedFile "virtual_mailbox_map"}"
+            else mappedFile "virtual_mailbox_map";
 
           virtual_transport = "lmtp:inet:${cfg.lmtp-server.host}:${
               toString cfg.lmtp-server.port
             }";
 
           message_size_limit = toString (cfg.message-size-limit * 1024 * 1024);
+
+          # Rate Limiting: Prevent abuse from compromised accounts
+          # Limits messages and recipients per user per hour
+        } // (optionalAttrs cfg.rate-limit.enable {
+          # Anvil service tracks connection/rate statistics
+          anvil_rate_time_unit = "3600s";  # 1 hour window
+
+          # Message rate: max messages per hour per SASL user
+          smtpd_client_message_rate_limit = toString cfg.rate-limit.message-rate-limit;
+
+          # Recipient rate: max recipients per hour per SASL user
+          smtpd_client_recipient_rate_limit = toString cfg.rate-limit.recipient-rate-limit;
+
+          # Connection rate: max connections per minute from same IP
+          smtpd_client_connection_rate_limit = "60";
+
+          # Enable per-user tracking for authenticated clients
+          smtpd_client_restrictions = "permit_sasl_authenticated, reject";
+        }) // {
 
           # Not used?
           # stmpd_banner = "${cfg.hostname} ESMTP NO UCE";
@@ -486,16 +530,16 @@ in {
 
           # TLS Protocol Configuration
           # Disable obsolete/insecure protocols: SSLv2, SSLv3, TLSv1.0
-          # Note: TLSv1.1 is also deprecated (RFC 8996, 2021) but kept for compatibility
-          # TODO: Consider removing TLSv1.1 and enforcing TLSv1.2+ only
+          # TLS Protocol Configuration: TLSv1.2+ only (RFC 8996, 2021)
+          # TLSv1.1 and earlier are deprecated and disabled for security
           smtpd_tls_protocols =
-            [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
+            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
           smtp_tls_protocols =
-            [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
+            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
           smtpd_tls_mandatory_protocols =
-            [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
+            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
           smtp_tls_mandatory_protocols =
-            [ "TLSv1.2" "TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
+            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
 
           # Cipher Configuration: Use only "high" security ciphers
           # Excludes weak/broken algorithms and ensures forward secrecy
