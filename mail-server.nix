@@ -354,26 +354,27 @@ in {
       enable = true;
       maxretry = cfg.fail2ban.maxretry;
       bantime = "${toString cfg.fail2ban.bantime}";
-      findtime = "${toString cfg.fail2ban.findtime}";
 
       jails = {
         # Postfix SMTP authentication failures
-        postfix-sasl = ''
-          enabled = true
-          filter = postfix-sasl
-          port = smtp,submission,submissions
-          logpath = /var/log/journal
-          backend = systemd
-        '';
+        postfix-sasl.settings = {
+          enabled = true;
+          filter = "postfix-sasl";
+          port = "smtp,submission,submissions";
+          logpath = "/var/log/journal";
+          backend = "systemd";
+          findtime = "${toString cfg.fail2ban.findtime}";
+        };
 
         # Dovecot IMAP/POP3 authentication failures
-        dovecot = ''
-          enabled = true
-          filter = dovecot
-          port = imap,imaps,pop3,pop3s
-          logpath = /var/log/journal
-          backend = systemd
-        '';
+        dovecot.settings = {
+          enabled = true;
+          filter = "dovecot";
+          port = "imap,imaps,pop3,pop3s";
+          logpath = "/var/log/journal";
+          backend = "systemd";
+          findtime = "${toString cfg.fail2ban.findtime}";
+        };
       };
     };
 
