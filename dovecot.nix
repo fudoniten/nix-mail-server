@@ -408,6 +408,9 @@ in {
         in ''
           ## Extra Config
 
+          # Add plugin directories for dovecot_pigeonhole and dovecot_fts_xapian
+          mail_plugin_dir = ${pkgs.dovecot}/lib/dovecot:${pkgs.dovecot_pigeonhole}/lib/dovecot:${pkgs.dovecot_fts_xapian}/lib/dovecot
+
           !include /etc/dovecot/conf.d/admin.conf
 
           ${lib.optionalString cfg.debug ''
