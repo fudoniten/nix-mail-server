@@ -430,10 +430,8 @@ in {
         config = {
           # TLS certificate and key configuration
           # Combined cert+key file for both server (smtpd) and client (smtp) operations
-          smtpd_tls_chain_files =
-            "${cfg.ssl.private-key}, ${cfg.ssl.certificate}";
-          smtp_tls_chain_files =
-            "${cfg.ssl.private-key}, ${cfg.ssl.certificate}";
+          smtpd_tls_chain_files = [ cfg.ssl.private-key cfg.ssl.certificate ];
+          smtp_tls_chain_files = [ cfg.ssl.private-key cfg.ssl.certificate ];
 
           virtual_mailbox_domains = allDomains;
           virtual_mailbox_maps = if cfg.ldap-recipient-maps != null then
