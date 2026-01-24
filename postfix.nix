@@ -645,7 +645,7 @@ in {
             command = "spawn";
             args = [
               "user=nobody"
-              "argv=${pkgs.pypolicyd-spf}/bin/policyd-spf"
+              "argv=${pkgs.spf-engine}/bin/policyd-spf"
               "${policydSpfConfig}"
             ];
           };
