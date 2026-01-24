@@ -5,7 +5,7 @@
 # Provides email delivery and access via IMAP with advanced features:
 # - LMTP for local mail delivery from Postfix
 # - IMAP/IMAPS for mail client access
-# - Full-text search via Xapian (FTS)
+# - Full-text search via Flatcurve (FTS, Xapian-based)
 # - Sieve filtering for server-side mail rules
 # - LDAP authentication via Authentik
 # - Automatic spam learning integration with Rspamd
@@ -13,7 +13,7 @@
 #
 # Architecture choices:
 # - Maildir++ format for reliability and compatibility
-# - Xapian for full-text search (lighter than Solr, faster than built-in)
+# - Flatcurve for full-text search (Xapian-based, actively maintained)
 # - Sieve for filtering (spam learning, folder sorting, etc.)
 # - LDAP auth for centralized user management
 # - Virtual plugin for alias handling
@@ -284,7 +284,7 @@ in {
         mode = "400";
       };
 
-      systemPackages = with pkgs; [ dovecot_pigeonhole dovecot_fts_xapian ];
+      systemPackages = with pkgs; [ dovecot_pigeonhole dovecot-fts-flatcurve ];
     };
 
     services = {
@@ -315,12 +315,12 @@ in {
         protocols = [ "sieve" ];
 
         mailPlugins = {
-          globally.enable = [ "old_stats" "fts" "fts_xapian" ]
+          globally.enable = [ "old_stats" "fts" "fts_flatcurve" ]
             ++ (optional cfg.quota.enable "quota");
           perProtocol = {
-            imap.enable = [ "imap_sieve" "fts" "fts_xapian" ]
+            imap.enable = [ "imap_sieve" "fts" "fts_flatcurve" ]
               ++ (optional cfg.quota.enable "imap_quota");
-            lmtp.enable = [ "sieve" "fts" "fts_xapian" ]
+            lmtp.enable = [ "sieve" "fts" "fts_flatcurve" ]
               ++ (optional cfg.quota.enable "quota");
           };
         };
@@ -408,8 +408,8 @@ in {
         in ''
           ## Extra Config
 
-          # Add plugin directories for dovecot_pigeonhole and dovecot_fts_xapian
-          mail_plugin_dir = ${pkgs.dovecot}/lib/dovecot:${pkgs.dovecot_pigeonhole}/lib/dovecot:${pkgs.dovecot_fts_xapian}/lib/dovecot
+          # Add plugin directories for dovecot_pigeonhole and dovecot-fts-flatcurve
+          mail_plugin_dir = ${pkgs.dovecot}/lib/dovecot:${pkgs.dovecot_pigeonhole}/lib/dovecot:${pkgs.dovecot-fts-flatcurve}/lib/dovecot
 
           !include /etc/dovecot/conf.d/admin.conf
 
@@ -426,26 +426,33 @@ in {
           ssl_prefer_server_ciphers = yes
 
           plugin {
-            fts = xapian
-            fts_xapian = partial=3 full=20 ${
-              optionalString cfg.debug "verbose=2"
-            }
+            fts = flatcurve
             fts_autoindex = yes
             fts_enforced = yes
             fts_autoindex_exclude = \Trash
             fts_autoindex_exclude = \Junk
             fts_decoder = decode2text
 
-            ${optionalString cfg.quota.enable ''
-              # Quota configuration
-              quota = maildir:User quota
-              quota_rule = *:storage=${cfg.quota.limit}
-              quota_rule2 = Trash:storage=+1G
-              quota_warning = storage=${toString cfg.quota.warning-threshold}%% quota-warning ${toString cfg.quota.warning-threshold} %u
-              quota_status_success = DUNNO
-              quota_status_nouser = DUNNO
-              quota_status_overquota = "552 5.2.2 Mailbox is full"
-            ''}
+            # Flatcurve requires language configuration for stemming
+            fts_languages = en
+            fts_tokenizers = generic email-address
+            fts_tokenizer_generic = algorithm=simple maxlen=30
+            fts_tokenizer_email_address = maxlen=100
+
+            ${
+              optionalString cfg.quota.enable ''
+                # Quota configuration
+                quota = maildir:User quota
+                quota_rule = *:storage=${cfg.quota.limit}
+                quota_rule2 = Trash:storage=+1G
+                quota_warning = storage=${
+                  toString cfg.quota.warning-threshold
+                }%% quota-warning ${toString cfg.quota.warning-threshold} %u
+                quota_status_success = DUNNO
+                quota_status_nouser = DUNNO
+                quota_status_overquota = "552 5.2.2 Mailbox is full"
+              ''
+            }
           }
 
           service indexer-worker {
