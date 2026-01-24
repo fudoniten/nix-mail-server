@@ -162,7 +162,9 @@ in {
     };
 
     rate-limit = {
-      enable = mkEnableOption "Enable rate limiting for outbound mail." // { default = true; };
+      enable = mkEnableOption "Enable rate limiting for outbound mail." // {
+        default = true;
+      };
 
       message-rate-limit = mkOption {
         type = int;
@@ -192,7 +194,8 @@ in {
 
     ldap-recipient-maps = mkOption {
       type = nullOr str;
-      description = "Path to Postfix LDAP recipient maps configuration. If null, uses catch-all.";
+      description =
+        "Path to Postfix LDAP recipient maps configuration. If null, uses catch-all.";
       default = null;
     };
 
@@ -294,41 +297,43 @@ in {
         # Defense against sender spoofing and forged addresses
         # Order matters: evaluated sequentially until match
         sender-restrictions = [
-          "check_sender_access ${mappedFile "reject_senders"}"  # Blacklist specific senders
-          "reject_sender_login_mismatch"  # CRITICAL: Prevent auth users from spoofing others
-          "reject_non_fqdn_sender"        # Require fully-qualified sender addresses
-          "permit_sasl_authenticated"     # Allow authenticated users
-          "permit_mynetworks"             # Allow trusted networks
+          "check_sender_access ${
+            mappedFile "reject_senders"
+          }" # Blacklist specific senders
+          "reject_sender_login_mismatch" # CRITICAL: Prevent auth users from spoofing others
+          "reject_non_fqdn_sender" # Require fully-qualified sender addresses
+          "permit_sasl_authenticated" # Allow authenticated users
+          "permit_mynetworks" # Allow trusted networks
         ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
           cfg.blacklist.dns) ++ [ "permit" ];
 
         # RELAY RESTRICTIONS: Control who can relay mail through server
         # Prevents open relay abuse (critical for preventing spam listing)
         relay-restrictions = [
-          "permit_sasl_authenticated"     # Auth users can relay
-          "permit_mynetworks"             # Trusted networks can relay
-          "reject_unauth_destination"     # Block everything else
+          "permit_sasl_authenticated" # Auth users can relay
+          "permit_mynetworks" # Trusted networks can relay
+          "reject_unauth_destination" # Block everything else
           "permit"
         ];
 
         # RECIPIENT RESTRICTIONS: Applied to RCPT TO
         # Multi-layer defense against spam and abuse
         recipient-restrictions = [
-          "check_recipient_access ${mappedFile "reject_recipients"}"  # Blacklist
-          "reject_unknown_sender_domain"    # Sender domain must have valid DNS
+          "check_recipient_access ${mappedFile "reject_recipients"}" # Blacklist
+          "reject_unknown_sender_domain" # Sender domain must have valid DNS
           "reject_unknown_recipient_domain" # Recipient domain must have valid DNS
-          "permit_sasl_authenticated"       # Auth users bypass further checks
-          "reject_unauth_pipelining"        # Block SMTP pipelining abuse
+          "permit_sasl_authenticated" # Auth users bypass further checks
+          "reject_unauth_pipelining" # Block SMTP pipelining abuse
           ## Not needed, since relay did it already
           # "reject_unauth_destination"
-          "reject_invalid_hostname"         # Require valid hostnames
+          "reject_invalid_hostname" # Require valid hostnames
           "reject_non_fqdn_hostname"
           "reject_non_fqdn_sender"
           "reject_non_fqdn_recipient"
         ] ++ (optional cfg.policy-spf.enable
-          "check_policy_service unix:private/policy-spf")  # SPF validation
+          "check_policy_service unix:private/policy-spf") # SPF validation
           ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns)  # DNS blacklists
+            cfg.blacklist.dns) # DNS blacklists
           ++ [ "permit_mynetworks" "reject_unauth_destination" "permit" ];
 
         # CLIENT RESTRICTIONS: Applied to connecting clients
@@ -422,15 +427,21 @@ in {
         in concatStringsSep "\n" ((mkUserAliases cfg.aliases.user-aliases)
           ++ (mkAliasUsers allDomains cfg.aliases.alias-users));
 
-        sslCert = cfg.ssl.certificate;
-        sslKey = cfg.ssl.private-key;
-
         config = {
+          # TLS certificate and key configuration
+          # Combined cert+key file for both server (smtpd) and client (smtp) operations
+          smtpd_tls_chain_files =
+            "${cfg.ssl.private-key}, ${cfg.ssl.certificate}";
+          smtp_tls_chain_files =
+            "${cfg.ssl.private-key}, ${cfg.ssl.certificate}";
+
           virtual_mailbox_domains = allDomains;
-          virtual_mailbox_maps =
-            if cfg.ldap-recipient-maps != null
-            then "ldap:${cfg.ldap-recipient-maps}, ${mappedFile "virtual_mailbox_map"}"
-            else mappedFile "virtual_mailbox_map";
+          virtual_mailbox_maps = if cfg.ldap-recipient-maps != null then
+            "ldap:${cfg.ldap-recipient-maps}, ${
+              mappedFile "virtual_mailbox_map"
+            }"
+          else
+            mappedFile "virtual_mailbox_map";
 
           virtual_transport = "lmtp:inet:${cfg.lmtp-server.host}:${
               toString cfg.lmtp-server.port
@@ -442,13 +453,15 @@ in {
           # Limits messages and recipients per user per hour
         } // (optionalAttrs cfg.rate-limit.enable {
           # Anvil service tracks connection/rate statistics
-          anvil_rate_time_unit = "3600s";  # 1 hour window
+          anvil_rate_time_unit = "3600s"; # 1 hour window
 
           # Message rate: max messages per hour per SASL user
-          smtpd_client_message_rate_limit = toString cfg.rate-limit.message-rate-limit;
+          smtpd_client_message_rate_limit =
+            toString cfg.rate-limit.message-rate-limit;
 
           # Recipient rate: max recipients per hour per SASL user
-          smtpd_client_recipient_rate_limit = toString cfg.rate-limit.recipient-rate-limit;
+          smtpd_client_recipient_rate_limit =
+            toString cfg.rate-limit.recipient-rate-limit;
 
           # Connection rate: max connections per minute from same IP
           smtpd_client_connection_rate_limit = "60";
@@ -474,10 +487,10 @@ in {
           # SASL AUTHENTICATION: Integrate with Dovecot for user auth
           # Used for submission ports (587/465) to verify users before accepting mail
           smtpd_sasl_type = "dovecot";
-          smtpd_sasl_path = "/run/dovecot2/auth";  # Unix socket to Dovecot
+          smtpd_sasl_path = "/run/dovecot2/auth"; # Unix socket to Dovecot
           smtpd_sasl_auth_enable = "yes";
           smtpd_sasl_local_domain = cfg.sasl-domain;
-          smtpd_sasl_authenticated_header = "yes";  # Add auth info to headers
+          smtpd_sasl_authenticated_header = "yes"; # Add auth info to headers
 
           # Disable anonymous SASL mechanisms (require real credentials)
           smtpd_sasl_security_options = "noanonymous";
