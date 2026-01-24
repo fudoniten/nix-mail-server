@@ -447,7 +447,7 @@ in {
               toString cfg.lmtp-server.port
             }";
 
-          message_size_limit = toString (cfg.message-size-limit * 1024 * 1024);
+          message_size_limit = cfg.message-size-limit * 1024 * 1024;
 
           # Rate Limiting: Prevent abuse from compromised accounts
           # Limits messages and recipients per user per hour
