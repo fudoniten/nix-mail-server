@@ -314,10 +314,6 @@ in {
         mailboxes = cfg.mailboxes;
         protocols = [ "sieve" ];
 
-        # Add plugin packages so NixOS merges their lib/dovecot directories
-        # into a single modulesDir and sets mail_plugin_dir automatically
-        modules = [ pkgs.dovecot_pigeonhole pkgs.dovecot-fts-flatcurve ];
-
         mailPlugins = {
           globally.enable = [ "old_stats" "fts" "fts_flatcurve" ]
             ++ (optional cfg.quota.enable "quota");
