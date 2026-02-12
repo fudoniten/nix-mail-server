@@ -91,7 +91,13 @@ in {
         # instruction crashes on older CPUs lacking SSE4.2 (e.g. Xeon L5420).
         # The runtime "disable_hyperscan" config is not sufficient because the
         # vectorscan library is still loaded and its init code uses SSE4.2.
-        package = pkgs.rspamd.override { withVectorscan = false; };
+        # Note: overrideAttrs is needed because nixpkgs hardcodes
+        # -DENABLE_HYPERSCAN=ON in cmakeFlags regardless of withVectorscan.
+        package = (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs (old: {
+          cmakeFlags = map
+            (f: if f == "-DENABLE_HYPERSCAN=ON" then "-DENABLE_HYPERSCAN=OFF" else f)
+            old.cmakeFlags;
+        });
 
         locals = {
           # Add detailed spam headers to help with debugging and filtering
