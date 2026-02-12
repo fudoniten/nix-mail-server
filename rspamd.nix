@@ -14,16 +14,11 @@
 #
 # Architecture choices:
 # - Redis backend for statistics and fuzzy hashes (fast, scalable)
-# - Hyperscan disabled (CPU-intensive, problematic on older hardware)
+# - Vectorscan/Hyperscan disabled at build level (requires SSE4.2+)
 # - Auto-learning via Sieve scripts (ham.sieve/spam.sieve in Dovecot)
 # - Milter integration with Postfix for real-time filtering
 # - ClamAV rejects infected mail immediately (no quarantine)
 # - MX validation checks sender domains have valid mail servers
-#
-# Performance note: Hyperscan can provide faster regex matching but requires
-# modern CPU with SSE4.2 support and uses significant memory. It's disabled
-# here because current mail servers run on older hardware without the required
-# CPU instructions. Can be re-enabled after hardware upgrade.
 #
 # TODO: Add support for custom DNS blacklists configuration
 
@@ -92,17 +87,13 @@ in {
       rspamd = {
         enable = true;
 
-        # Include custom configuration for settings not covered by NixOS options
-        extraConfig = ''
-          .include "$LOCAL_CONFDIR/local.d/custom.conf"
-        '';
+        # Build rspamd without vectorscan (hyperscan fork) to avoid illegal
+        # instruction crashes on older CPUs lacking SSE4.2 (e.g. Xeon L5420).
+        # The runtime "disable_hyperscan" config is not sufficient because the
+        # vectorscan library is still loaded and its init code uses SSE4.2.
+        package = pkgs.rspamd.override { withVectorscan = false; };
 
         locals = {
-
-          # Disable hyperscan due to old server hardware lacking required CPU instructions
-          # Hyperscan requires SSE4.2 support - can re-enable after hardware upgrade
-          "custom.conf".text = "disable_hyperscan = true;";
-
           # Add detailed spam headers to help with debugging and filtering
           # Headers include scores, symbols matched, and individual test results
           "milter_headers.conf".text = "extended_spam_headers = yes;";
