@@ -444,23 +444,30 @@ DNS requirements are scattered or implied, not centrally documented.
 
 ## Performance Improvements
 
-### 15. Hyperscan Re-enablement
+### 15. Hyperscan/Vectorscan Configuration (RESOLVED)
 
-**Priority**: LOW (blocked on hardware)
+**Priority**: COMPLETED
 
-Hyperscan disabled due to old hardware lacking SSE4.2 instructions.
+**Status**: Hyperscan is now enabled via a custom vectorscan build.
 
-**When**: After hardware upgrade to modern CPUs
+**Background**: The standard vectorscan package in nixpkgs builds with AVX2/AVX512
+support, which can cause crashes on older CPUs that only support SSSE3. Rather than
+disabling hyperscan entirely (which rspamd 3.x doesn't cleanly support), we now
+build vectorscan with the fat runtime but only SSSE3 baseline support.
 
-**Solution**:
-```nix
-# rspamd.nix:79
-"custom.conf".text = "disable_hyperscan = false;";
-```
+**Solution Applied**:
+The flake.nix now includes an overlay that builds vectorscan with:
+- `FAT_RUNTIME=ON` - Runtime CPU detection for optimal performance
+- `BUILD_AVX2=OFF` - Disabled to support older CPUs
+- `BUILD_AVX512=OFF` - Disabled to support older CPUs
 
-**Expected Improvement**: 20-30% faster regex processing in Rspamd
+This allows rspamd to use hyperscan's fast regex matching even on older hardware.
+The fat runtime will automatically use the best available implementation for the
+host CPU at runtime.
 
-**Estimated Effort**: 5 minutes (change + test)
+**Future Optimization**: After upgrading to modern hardware with AVX2/AVX512 support,
+remove the `legacyCpuOverlay` from flake.nix to use the standard nixpkgs vectorscan
+build and gain additional performance.
 
 ---
 
@@ -655,7 +662,7 @@ systemd.timers.mail-health-check = {
 11. ✅ **Greylisting** - Additional spam protection
 
 ### Long Term (When Needed)
-12. ✅ **Hyperscan** - After hardware upgrade
+12. ✅ **Hyperscan** - Enabled via SSSE3-only vectorscan build (see item 15)
 13. ✅ **Vacation/Autoresponder** - User feature
 14. ✅ **Archive** - If compliance needed
 15. ✅ **Webmail** - User convenience

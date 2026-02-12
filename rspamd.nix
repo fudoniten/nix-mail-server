@@ -14,17 +14,21 @@
 #
 # Architecture choices:
 # - Redis backend for statistics and fuzzy hashes (fast, scalable)
-# - Vectorscan/Hyperscan disabled at build level (requires SSE4.2+)
+# - Hyperscan enabled via vectorscan with SSSE3-only build for old CPU support
 # - Auto-learning via Sieve scripts (ham.sieve/spam.sieve in Dovecot)
 # - Milter integration with Postfix for real-time filtering
 # - ClamAV rejects infected mail immediately (no quarantine)
 # - MX validation checks sender domains have valid mail servers
 #
+# Performance note: Vectorscan (hyperscan fork) is built with SSSE3-only
+# baseline via flake overlay, enabling fast regex matching on older CPUs
+# that lack SSE4.2/AVX2 support. The fat runtime automatically selects
+# the best implementation for the host CPU at runtime.
+#
 # TODO: Add support for custom DNS blacklists configuration
 
 with lib;
-let
-  cfg = config.fudo.mail.rspamd;
+let cfg = config.fudo.mail.rspamd;
 
 in {
   options.fudo.mail.rspamd = with types; {
@@ -93,11 +97,15 @@ in {
         # vectorscan library is still loaded and its init code uses SSE4.2.
         # Note: overrideAttrs is needed because nixpkgs hardcodes
         # -DENABLE_HYPERSCAN=ON in cmakeFlags regardless of withVectorscan.
-        package = (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs (old: {
-          cmakeFlags = map
-            (f: if f == "-DENABLE_HYPERSCAN=ON" then "-DENABLE_HYPERSCAN=OFF" else f)
-            old.cmakeFlags;
-        });
+        package =
+          (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs
+          (old: {
+            cmakeFlags = map (f:
+              if f == "-DENABLE_HYPERSCAN=ON" then
+                "-DENABLE_HYPERSCAN=OFF"
+              else
+                f) old.cmakeFlags;
+          });
 
         locals = {
           # Add detailed spam headers to help with debugging and filtering

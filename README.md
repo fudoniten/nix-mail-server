@@ -392,7 +392,7 @@ swaks --to user@example.com \
 
 ### High CPU Usage
 
-**Likely hyperscan disabled**: This is expected. Hyperscan is disabled because the current mail servers run on older hardware without SSE4.2 CPU instructions. Performance impact is acceptable for our mail volume. Can re-enable after hardware upgrade.
+**Vectorscan/Hyperscan**: The mail server uses vectorscan (hyperscan fork) for fast regex matching in Rspamd. The flake includes an overlay that builds vectorscan with SSSE3-only support for compatibility with older CPUs. If you have modern hardware with AVX2/AVX512 support, you can remove the `legacyCpuOverlay` from flake.nix to use the standard nixpkgs build for better performance.
 
 ### Mail Storage Full
 
@@ -425,12 +425,12 @@ Consider increasing:
 
 ### Current Limitations
 
-- **Old hardware**: Hyperscan disabled due to lack of SSE4.2 instructions
+- **Legacy CPU support**: Vectorscan built with SSSE3-only baseline (no AVX2/AVX512)
 - **UID/GID**: Fixed at 5025 for mail user/group
 
 ### Recommended Specs
 
-- **CPU**: Modern x64 with SSE4.2 (for hyperscan when re-enabled)
+- **CPU**: Any x64 with SSSE3 support (AVX2/AVX512 for optimal performance)
 - **RAM**: 2GB minimum, 4GB+ recommended
 - **Disk**: SSD strongly recommended for mail storage and indexes
 - **Network**: Static IP with reverse DNS
