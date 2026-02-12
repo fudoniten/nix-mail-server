@@ -314,6 +314,10 @@ in {
         mailboxes = cfg.mailboxes;
         protocols = [ "sieve" ];
 
+        # Add plugin packages so NixOS merges their lib/dovecot directories
+        # into a single modulesDir and sets mail_plugin_dir automatically
+        modules = [ pkgs.dovecot_pigeonhole pkgs.dovecot-fts-flatcurve ];
+
         mailPlugins = {
           globally.enable = [ "old_stats" "fts" "fts_flatcurve" ]
             ++ (optional cfg.quota.enable "quota");
@@ -403,24 +407,10 @@ in {
             paths = [ learnHam learnSpam ];
           };
 
-          # Merge all dovecot plugin directories into a single directory,
-          # since mail_plugin_dir only accepts a single path.
-          dovecotPluginDir = pkgs.symlinkJoin {
-            name = "dovecot-plugin-dir";
-            paths = [
-              "${pkgs.dovecot}/lib/dovecot"
-              "${pkgs.dovecot_pigeonhole}/lib/dovecot"
-              "${pkgs.dovecot-fts-flatcurve}/lib/dovecot"
-            ];
-          };
-
           mailUserUid = config.users.users."${cfg.mail-user}".uid;
           mailUserGid = config.users.groups."${cfg.mail-group}".gid;
         in ''
           ## Extra Config
-
-          # Add plugin directories for dovecot_pigeonhole and dovecot-fts-flatcurve
-          mail_plugin_dir = ${dovecotPluginDir}
 
           !include /etc/dovecot/conf.d/admin.conf
 
