@@ -403,13 +403,24 @@ in {
             paths = [ learnHam learnSpam ];
           };
 
+          # Merge all dovecot plugin directories into a single directory,
+          # since mail_plugin_dir only accepts a single path.
+          dovecotPluginDir = pkgs.symlinkJoin {
+            name = "dovecot-plugin-dir";
+            paths = [
+              "${pkgs.dovecot}/lib/dovecot"
+              "${pkgs.dovecot_pigeonhole}/lib/dovecot"
+              "${pkgs.dovecot-fts-flatcurve}/lib/dovecot"
+            ];
+          };
+
           mailUserUid = config.users.users."${cfg.mail-user}".uid;
           mailUserGid = config.users.groups."${cfg.mail-group}".gid;
         in ''
           ## Extra Config
 
           # Add plugin directories for dovecot_pigeonhole and dovecot-fts-flatcurve
-          mail_plugin_dir = ${pkgs.dovecot}/lib/dovecot:${pkgs.dovecot_pigeonhole}/lib/dovecot:${pkgs.dovecot-fts-flatcurve}/lib/dovecot
+          mail_plugin_dir = ${dovecotPluginDir}
 
           !include /etc/dovecot/conf.d/admin.conf
 
