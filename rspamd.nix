@@ -91,21 +91,10 @@ in {
       rspamd = {
         enable = true;
 
-        # Build rspamd without vectorscan (hyperscan fork) to avoid illegal
-        # instruction crashes on older CPUs lacking SSE4.2 (e.g. Xeon L5420).
-        # The runtime "disable_hyperscan" config is not sufficient because the
-        # vectorscan library is still loaded and its init code uses SSE4.2.
-        # Note: overrideAttrs is needed because nixpkgs hardcodes
-        # -DENABLE_HYPERSCAN=ON in cmakeFlags regardless of withVectorscan.
-        package =
-          (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs
-          (old: {
-            cmakeFlags = map (f:
-              if f == "-DENABLE_HYPERSCAN=ON" then
-                "-DENABLE_HYPERSCAN=OFF"
-              else
-                f) old.cmakeFlags;
-          });
+        # Use vectorscan (hyperscan fork) for fast regex matching.
+        # The flake overlay builds vectorscan with SSSE3-only baseline,
+        # which works on older CPUs like Xeon L5420 that lack SSE4.2/AVX2.
+        # Default nixpkgs rspamd already has withVectorscan = true.
 
         locals = {
           # Add detailed spam headers to help with debugging and filtering
