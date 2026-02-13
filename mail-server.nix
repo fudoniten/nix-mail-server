@@ -54,6 +54,27 @@ let
   hostname = config.instance.hostname;
   hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
 
+  # Overlay to build vectorscan with SSSE3-only baseline for CPU compatibility
+  # This prevents "Illegal instruction" errors when vectorscan tries to use
+  # AVX2/AVX512 instructions that may not be available in containerized environments
+  # or on older CPUs. The fat runtime enables runtime CPU feature detection.
+  legacyCpuOverlay = final: prev: {
+    vectorscan = prev.vectorscan.overrideAttrs (oldAttrs: {
+      cmakeFlags = [
+        (if oldAttrs.enableShared or true then
+          "-DBUILD_SHARED_LIBS=ON"
+        else
+          "-DBUILD_STATIC_LIBS=ON")
+        # Fat runtime with only baseline SSSE3 support
+        # No AVX2/AVX512 to avoid issues on older CPUs or containers
+        "-DFAT_RUNTIME=ON"
+        "-DBUILD_AVX2=OFF"
+        "-DBUILD_AVX512=OFF"
+        "-DBUILD_AVX512VBMI=OFF"
+      ];
+    });
+  };
+
   # Auto-generated passwords for internal services
   # WARNING: These are deterministic based on build-seed and stored in Nix store
   # Consider migrating to runtime secret injection
@@ -563,8 +584,8 @@ in {
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall.enable = false;
                 # Apply vectorscan overlay to ensure SSSE3-only build
-                # This prevents "Illegal instruction" errors on older CPUs
-                nixpkgs.overlays = toplevel.config.nixpkgs.overlays;
+                # This prevents "Illegal instruction" errors in containers
+                nixpkgs.overlays = [ legacyCpuOverlay ];
 
                 fudo.mail.rspamd = {
                   enable = true;
