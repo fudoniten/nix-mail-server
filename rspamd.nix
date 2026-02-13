@@ -104,7 +104,7 @@ in {
             patches = (old.patches or [ ]) ++ [
               (pkgs.fetchpatch2 {
                 url = "https://github.com/rspamd/rspamd/commit/98e731bf69306a830834fbcfa7a21c3357130693.patch";
-                hash = "sha256-ylWVrG56JWZvoyGicHHFFwA+pNdWAdHqSaBACh37+OE=";
+                hash = "sha256-IteHMgv9j4Xf/Auc9hw7usIy2v7Y8xLP1OFVkSuxwjw=";
               })
             ];
             cmakeFlags = map
