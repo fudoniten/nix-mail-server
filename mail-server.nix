@@ -562,6 +562,10 @@ in {
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
                 networking.firewall.enable = false;
+                # Apply vectorscan overlay to ensure SSSE3-only build
+                # This prevents "Illegal instruction" errors on older CPUs
+                nixpkgs.overlays = toplevel.config.nixpkgs.overlays;
+
                 fudo.mail.rspamd = {
                   enable = true;
                   ports = {
