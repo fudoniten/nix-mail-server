@@ -392,7 +392,7 @@ swaks --to user@example.com \
 
 ### High CPU Usage
 
-**Vectorscan/Hyperscan**: The mail server uses vectorscan (hyperscan fork) for fast regex matching in Rspamd. The flake includes an overlay that builds vectorscan with SSSE3-only support for compatibility with older CPUs. If you have modern hardware with AVX2/AVX512 support, you can remove the `legacyCpuOverlay` from flake.nix to use the standard nixpkgs build for better performance.
+**Vectorscan/Hyperscan**: Vectorscan is disabled in this deployment because it requires SSE4.2+ (the current server CPU, Xeon L5420, only has SSSE3). Rspamd uses PCRE-based regex matching instead. After upgrading to hardware with SSE4.2+, remove the `package` override in rspamd.nix to re-enable vectorscan for better performance.
 
 ### Mail Storage Full
 
@@ -425,12 +425,12 @@ Consider increasing:
 
 ### Current Limitations
 
-- **Legacy CPU support**: Vectorscan built with SSSE3-only baseline (no AVX2/AVX512)
+- **Legacy CPU support**: Vectorscan disabled (requires SSE4.2+, Xeon L5420 has SSSE3 only)
 - **UID/GID**: Fixed at 5025 for mail user/group
 
 ### Recommended Specs
 
-- **CPU**: Any x64 with SSSE3 support (AVX2/AVX512 for optimal performance)
+- **CPU**: Any x64 processor (SSE4.2+ recommended to enable vectorscan for faster spam filtering)
 - **RAM**: 2GB minimum, 4GB+ recommended
 - **Disk**: SSD strongly recommended for mail storage and indexes
 - **Network**: Static IP with reverse DNS

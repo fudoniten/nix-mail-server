@@ -448,26 +448,26 @@ DNS requirements are scattered or implied, not centrally documented.
 
 **Priority**: COMPLETED
 
-**Status**: Hyperscan is now enabled via a custom vectorscan build.
+**Status**: Hyperscan/vectorscan is disabled at build time.
 
-**Background**: The standard vectorscan package in nixpkgs builds with AVX2/AVX512
-support, which can cause crashes on older CPUs that only support SSSE3. Rather than
-disabling hyperscan entirely (which rspamd 3.x doesn't cleanly support), we now
-build vectorscan with the fat runtime but only SSSE3 baseline support.
+**Background**: Vectorscan (the hyperscan fork) requires SSE4.2 + POPCNT as its
+minimum x86_64 instruction set -- even the FAT_RUNTIME SSSE3 "baseline" tier uses
+SSE4.2 instructions internally. The Xeon L5420 only supports up to SSSE3, so
+vectorscan cannot run on this hardware regardless of build flags.
+
+An earlier attempt built vectorscan with FAT_RUNTIME=ON and AVX2/AVX512 disabled,
+but this still crashed with "Illegal instruction" because the base code tier
+unconditionally uses SSE4.2 instructions (POPCNT, etc.).
 
 **Solution Applied**:
-The flake.nix now includes an overlay that builds vectorscan with:
-- `FAT_RUNTIME=ON` - Runtime CPU detection for optimal performance
-- `BUILD_AVX2=OFF` - Disabled to support older CPUs
-- `BUILD_AVX512=OFF` - Disabled to support older CPUs
+Rspamd is built with `withVectorscan = false` and `-DENABLE_HYPERSCAN=OFF` in
+rspamd.nix. This was previously blocked by a linker error in rspamd 3.7.x
+(upstream issue #4701), but the fix (commit d907a95) is included in rspamd 3.13.0.
+Rspamd falls back to PCRE-based regex matching, which is slower but functional.
 
-This allows rspamd to use hyperscan's fast regex matching even on older hardware.
-The fat runtime will automatically use the best available implementation for the
-host CPU at runtime.
-
-**Future Optimization**: After upgrading to modern hardware with AVX2/AVX512 support,
-remove the `legacyCpuOverlay` from flake.nix to use the standard nixpkgs vectorscan
-build and gain additional performance.
+**Future Optimization**: After upgrading to hardware with SSE4.2+ support,
+remove the rspamd `package` override in rspamd.nix to re-enable vectorscan
+for faster regex matching.
 
 ---
 
@@ -662,7 +662,7 @@ systemd.timers.mail-health-check = {
 11. ✅ **Greylisting** - Additional spam protection
 
 ### Long Term (When Needed)
-12. ✅ **Hyperscan** - Enabled via SSSE3-only vectorscan build (see item 15)
+12. ✅ **Hyperscan** - Disabled (requires SSE4.2+, see item 15)
 13. ✅ **Vacation/Autoresponder** - User feature
 14. ✅ **Archive** - If compliance needed
 15. ✅ **Webmail** - User convenience

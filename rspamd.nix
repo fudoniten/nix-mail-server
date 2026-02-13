@@ -14,16 +14,11 @@
 #
 # Architecture choices:
 # - Redis backend for statistics and fuzzy hashes (fast, scalable)
-# - Hyperscan enabled via vectorscan with SSSE3-only build for old CPU support
+# - Vectorscan/Hyperscan disabled (requires SSE4.2+, not available on Xeon L5420)
 # - Auto-learning via Sieve scripts (ham.sieve/spam.sieve in Dovecot)
 # - Milter integration with Postfix for real-time filtering
 # - ClamAV rejects infected mail immediately (no quarantine)
 # - MX validation checks sender domains have valid mail servers
-#
-# Performance note: Vectorscan (hyperscan fork) is built with SSSE3-only
-# baseline via flake overlay, enabling fast regex matching on older CPUs
-# that lack SSE4.2/AVX2 support. The fat runtime automatically selects
-# the best implementation for the host CPU at runtime.
 #
 # TODO: Add support for custom DNS blacklists configuration
 
@@ -91,10 +86,23 @@ in {
       rspamd = {
         enable = true;
 
-        # Use vectorscan (hyperscan fork) for fast regex matching.
-        # The flake overlay builds vectorscan with SSSE3-only baseline,
-        # which works on older CPUs like Xeon L5420 that lack SSE4.2/AVX2.
-        # Default nixpkgs rspamd already has withVectorscan = true.
+        # Disable vectorscan (hyperscan fork) to avoid "Illegal instruction"
+        # crashes on CPUs without SSE4.2 (e.g. Xeon L5420, which only has SSSE3).
+        # Vectorscan's minimum x86_64 requirement is SSE4.2 + POPCNT, regardless
+        # of FAT_RUNTIME or AVX2/AVX512 build flags -- the base code tier always
+        # uses SSE4.2 instructions.  Rspamd falls back to PCRE regex matching.
+        # Note: nixpkgs hardcodes -DENABLE_HYPERSCAN=ON in cmakeFlags, so we
+        # must also override that via overrideAttrs.
+        package = (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs
+          (old: {
+            cmakeFlags = map
+              (f:
+                if f == "-DENABLE_HYPERSCAN=ON" then
+                  "-DENABLE_HYPERSCAN=OFF"
+                else
+                  f)
+              old.cmakeFlags;
+          });
 
         locals = {
           # Add detailed spam headers to help with debugging and filtering
