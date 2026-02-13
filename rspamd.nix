@@ -91,10 +91,22 @@ in {
         # Vectorscan's minimum x86_64 requirement is SSE4.2 + POPCNT, regardless
         # of FAT_RUNTIME or AVX2/AVX512 build flags -- the base code tier always
         # uses SSE4.2 instructions.  Rspamd falls back to PCRE regex matching.
-        # Note: nixpkgs hardcodes -DENABLE_HYPERSCAN=ON in cmakeFlags, so we
-        # must also override that via overrideAttrs.
+        #
+        # Two overrides are needed:
+        # 1. withVectorscan=false removes vectorscan from buildInputs
+        # 2. cmakeFlags override changes -DENABLE_HYPERSCAN=ON to OFF
+        #    (nixpkgs hardcodes it to ON)
+        # 3. Upstream patch 98e731bf adds a missing stub for
+        #    rspamd_re_cache_compile_hyperscan_scoped_single when building
+        #    without hyperscan (fixes linker error, upstream issue #5620)
         package = (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs
           (old: {
+            patches = (old.patches or [ ]) ++ [
+              (pkgs.fetchpatch2 {
+                url = "https://github.com/rspamd/rspamd/commit/98e731bf69306a830834fbcfa7a21c3357130693.patch";
+                hash = "sha256-ylWVrG56JWZvoyGicHHFFwA+pNdWAdHqSaBACh37+OE=";
+              })
+            ];
             cmakeFlags = map
               (f:
                 if f == "-DENABLE_HYPERSCAN=ON" then
