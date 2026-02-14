@@ -347,6 +347,18 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
+      # Secret directories for container mounts
+      "d /run/mail-server                          0755 - - - -"
+      "d /run/mail-server/ldap-proxy               0755 - - - -"
+      "d /run/mail-server/dovecot-secrets          0755 - - - -"
+      "d /run/mail-server/postfix-secrets          0755 - - - -"
+      "d /run/mail-server/redis                    0755 - - - -"
+      # Secret files - copy with world-readable permissions so container users can access
+      "C+ ${hostSecrets.mailLdapProxyEnv.target-file}        0644 root root - ${hostSecrets.mailLdapProxyEnv.source-file}"
+      "C+ ${hostSecrets.dovecotLdapConfig.target-file}       0644 root root - ${hostSecrets.dovecotLdapConfig.source-file}"
+      "C+ ${hostSecrets.postfixLdapRecipients.target-file}   0644 root root - ${hostSecrets.postfixLdapRecipients.source-file}"
+      "C+ ${hostSecrets.dovecotAdminConfig.target-file}      0644 root root - ${hostSecrets.dovecotAdminConfig.source-file}"
+      "C+ ${hostSecrets.redisPasswd.target-file}             0644 root root - ${hostSecrets.redisPasswd.source-file}"
     ];
 
     # Fail2ban configuration for brute force protection
@@ -411,7 +423,7 @@ in {
               capabilities.SYS_ADMIN = true;
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${hostSecrets.postfixLdapRecipients.target-file}:/run/credentials/ldap-recipients.cf:ro"
+                "${hostSecrets.postfixLdapRecipients.target-file}:/etc/postfix/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
@@ -475,7 +487,7 @@ in {
                     port = dkimPort;
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
-                  ldap-recipient-maps = "/run/credentials/ldap-recipients.cf";
+                  ldap-recipient-maps = "/etc/postfix/ldap-recipients.cf";
                 };
               };
             };
