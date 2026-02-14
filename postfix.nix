@@ -675,18 +675,5 @@ in {
         };
       };
     };
-
-    # Fix postfix-setup to ensure config directory exists
-    # In containers, activation might not complete before services start
-    systemd.services.postfix-setup = {
-      serviceConfig = {
-        ExecStartPre = [
-          # Ensure /etc/postfix directory exists
-          "${pkgs.coreutils}/bin/mkdir -p /etc/postfix"
-          # Wait for main.cf to be created by activation
-          "${pkgs.bash}/bin/bash -c 'for i in {1..30}; do [ -f /etc/postfix/main.cf ] && break; sleep 0.1; done'"
-        ];
-      };
-    };
   };
 }
