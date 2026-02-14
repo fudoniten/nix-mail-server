@@ -423,7 +423,7 @@ in {
               capabilities.SYS_ADMIN = true;
               volumes = [
                 "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${hostSecrets.postfixLdapRecipients.target-file}:/run/credentials/ldap-recipients.cf:ro"
+                "${hostSecrets.postfixLdapRecipients.target-file}:/etc/postfix/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
@@ -487,7 +487,7 @@ in {
                     port = dkimPort;
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
-                  ldap-recipient-maps = "/run/credentials/ldap-recipients.cf";
+                  ldap-recipient-maps = "/etc/postfix/ldap-recipients.cf";
                 };
               };
             };
