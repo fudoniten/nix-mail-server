@@ -347,6 +347,18 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
+      # Secret directories for container mounts
+      "d /run/mail-server                          0755 - - - -"
+      "d /run/mail-server/ldap-proxy               0755 - - - -"
+      "d /run/mail-server/dovecot-secrets          0755 - - - -"
+      "d /run/mail-server/postfix-secrets          0755 - - - -"
+      "d /run/mail-server/redis                    0755 - - - -"
+      # Secret files
+      "L+ ${hostSecrets.mailLdapProxyEnv.target-file}        - - - - ${hostSecrets.mailLdapProxyEnv.source-file}"
+      "L+ ${hostSecrets.dovecotLdapConfig.target-file}       - - - - ${hostSecrets.dovecotLdapConfig.source-file}"
+      "L+ ${hostSecrets.postfixLdapRecipients.target-file}   - - - - ${hostSecrets.postfixLdapRecipients.source-file}"
+      "L+ ${hostSecrets.dovecotAdminConfig.target-file}      - - - - ${hostSecrets.dovecotAdminConfig.source-file}"
+      "L+ ${hostSecrets.redisPasswd.target-file}             - - - - ${hostSecrets.redisPasswd.source-file}"
     ];
 
     # Fail2ban configuration for brute force protection
