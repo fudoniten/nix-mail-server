@@ -320,9 +320,9 @@ in {
         # Multi-layer defense against spam and abuse
         recipient-restrictions = [
           "check_recipient_access ${mappedFile "reject_recipients"}" # Blacklist
+          "permit_sasl_authenticated" # Auth users bypass further checks
           "reject_unknown_sender_domain" # Sender domain must have valid DNS
           "reject_unknown_recipient_domain" # Recipient domain must have valid DNS
-          "permit_sasl_authenticated" # Auth users bypass further checks
           "reject_unauth_pipelining" # Block SMTP pipelining abuse
           ## Not needed, since relay did it already
           # "reject_unauth_destination"
@@ -463,9 +463,6 @@ in {
 
           # Connection rate: max connections per minute from same IP
           smtpd_client_connection_rate_limit = "60";
-
-          # Enable per-user tracking for authenticated clients
-          smtpd_client_restrictions = "permit_sasl_authenticated, reject";
         }) // {
 
           # Not used?
