@@ -463,9 +463,6 @@ in {
 
           # Connection rate: max connections per minute from same IP
           smtpd_client_connection_rate_limit = "60";
-
-          # Enable per-user tracking for authenticated clients
-          smtpd_client_restrictions = "permit_sasl_authenticated, reject";
         }) // {
 
           # Not used?
