@@ -353,12 +353,12 @@ in {
       "d /run/mail-server/dovecot-secrets          0755 - - - -"
       "d /run/mail-server/postfix-secrets          0755 - - - -"
       "d /run/mail-server/redis                    0755 - - - -"
-      # Secret files
-      "L+ ${hostSecrets.mailLdapProxyEnv.target-file}        - - - - ${hostSecrets.mailLdapProxyEnv.source-file}"
-      "L+ ${hostSecrets.dovecotLdapConfig.target-file}       - - - - ${hostSecrets.dovecotLdapConfig.source-file}"
-      "L+ ${hostSecrets.postfixLdapRecipients.target-file}   - - - - ${hostSecrets.postfixLdapRecipients.source-file}"
-      "L+ ${hostSecrets.dovecotAdminConfig.target-file}      - - - - ${hostSecrets.dovecotAdminConfig.source-file}"
-      "L+ ${hostSecrets.redisPasswd.target-file}             - - - - ${hostSecrets.redisPasswd.source-file}"
+      # Secret files - copy with world-readable permissions so container users can access
+      "C+ ${hostSecrets.mailLdapProxyEnv.target-file}        0644 root root - ${hostSecrets.mailLdapProxyEnv.source-file}"
+      "C+ ${hostSecrets.dovecotLdapConfig.target-file}       0644 root root - ${hostSecrets.dovecotLdapConfig.source-file}"
+      "C+ ${hostSecrets.postfixLdapRecipients.target-file}   0644 root root - ${hostSecrets.postfixLdapRecipients.source-file}"
+      "C+ ${hostSecrets.dovecotAdminConfig.target-file}      0644 root root - ${hostSecrets.dovecotAdminConfig.source-file}"
+      "C+ ${hostSecrets.redisPasswd.target-file}             0644 root root - ${hostSecrets.redisPasswd.source-file}"
     ];
 
     # Fail2ban configuration for brute force protection
