@@ -101,6 +101,12 @@ in {
       default = [ ];
     };
 
+    admin-email = mkOption {
+      type = str;
+      description = "Email of mail server administrator.";
+      default = "admin@${toplevel.config.fudo.mail.primary-domain}";
+    };
+
     message-size-limit = mkOption {
       type = int;
       description = "Max allowed size of messages, in megabytes.";
@@ -110,6 +116,23 @@ in {
     sasl-domain = mkOption {
       type = str;
       description = "SASL domain to use for authentication.";
+    };
+
+    quota = {
+      enable = mkEnableOption "Enable user quotas for email storage.";
+
+      limit = mkOption {
+        type = str;
+        description = "Default quota limit per user (e.g., '10G', '1000M').";
+        default = "10G";
+      };
+
+      exemptions = mkOption {
+        type = listOf str;
+        description = "List of usernames exempt from quota limits.";
+        default = [ ];
+        example = [ "admin" ];
+      };
     };
 
     blacklist = {
@@ -168,7 +191,7 @@ in {
       bantime = mkOption {
         type = int;
         description = "Ban duration in seconds.";
-        default = 3600;  # 1 hour
+        default = 3600; # 1 hour
       };
 
       maxretry = mkOption {
@@ -180,7 +203,7 @@ in {
       findtime = mkOption {
         type = int;
         description = "Time window in seconds to count failures.";
-        default = 600;  # 10 minutes
+        default = 600; # 10 minutes
       };
     };
 
@@ -542,12 +565,11 @@ in {
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   admin-conf = "/run/dovecot2/conf.d/admin.conf";
-                  # Quota configuration with exemptions
                   quota = {
-                    enable = true;
-                    limit = "10G"; # Default limit for most users
-                    exemptions = [ "niten" ]; # Admins exempt from quota
-                    admin-email = "niten@fudo.org"; # Alert admin when users hit quota
+                    enable = cfg.quota.enable;
+                    limit = cfg.quota.limit;
+                    exemptions = cfg.quota.exemptions;
+                    admin-email = cfg.admin-email;
                   };
                 };
               };
