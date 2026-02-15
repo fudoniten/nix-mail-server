@@ -124,6 +124,21 @@ in {
         description = "Percentage at which to warn users (0-100).";
         default = 90;
       };
+
+      exemptions = mkOption {
+        type = listOf str;
+        description = "List of usernames exempt from quota limits.";
+        default = [ ];
+        example = [ "admin" "niten" ];
+      };
+
+      admin-email = mkOption {
+        type = nullOr str;
+        description =
+          "Admin email address to notify when users exceed quota. If null, no notifications sent.";
+        default = null;
+        example = "admin@example.com";
+      };
     };
 
     metrics = {
@@ -403,6 +418,28 @@ in {
             paths = [ learnHam learnSpam ];
           };
 
+          # Quota warning script - sends alert to admin when user hits quota
+          quotaWarningScript = pkgs.writeShellScript "quota-warning" ''
+            PERCENT=$1
+            USER=$2
+            ${optionalString (cfg.quota.admin-email != null) ''
+              cat << EOF | ${pkgs.system-sendmail}/bin/sendmail ${cfg.quota.admin-email}
+              From: Mail System <postmaster@$(hostname -f)>
+              To: Admin <${cfg.quota.admin-email}>
+              Subject: Quota warning: $USER at $PERCENT%
+
+              User $USER has exceeded $PERCENT% of their mailbox quota.
+              Current mailbox size may be approaching the limit of ${cfg.quota.limit}.
+
+              Please investigate and take appropriate action.
+              EOF
+            ''}
+          '';
+
+          # Userdb override for quota exemptions
+          userdbOverride = pkgs.writeText "dovecot-userdb-override" (concatStringsSep
+            "\n" (map (user: "${user}::::::quota_rule=*:storage=0") cfg.quota.exemptions));
+
           mailUserUid = config.users.users."${cfg.mail-user}".uid;
           mailUserGid = config.users.groups."${cfg.mail-group}".gid;
         in ''
@@ -444,7 +481,7 @@ in {
                 quota_rule2 = Trash:storage=+1G
                 quota_warning = storage=${
                   toString cfg.quota.warning-threshold
-                }%% quota-warning ${toString cfg.quota.warning-threshold} %u
+                }%% ${quotaWarningScript} ${toString cfg.quota.warning-threshold} %u
                 quota_status_success = DUNNO
                 quota_status_nouser = DUNNO
                 quota_status_overquota = "552 5.2.2 Mailbox is full"
@@ -487,6 +524,17 @@ in {
             driver = ldap
             args = ${cfg.ldap-conf}
           }
+
+          ${optionalString (cfg.quota.enable && cfg.quota.exemptions != [ ]) ''
+            # Quota exemptions - checked first for override
+            userdb {
+              driver = passwd-file
+              args = username_format=%n ${userdbOverride}
+              override_fields = quota_rule=*:storage=0
+              result_success = continue-ok
+              result_failure = continue
+            }
+          ''}
 
           # All users map to one actual system user
           userdb {

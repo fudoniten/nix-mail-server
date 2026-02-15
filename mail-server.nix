@@ -542,8 +542,13 @@ in {
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   admin-conf = "/run/dovecot2/conf.d/admin.conf";
-                  # Disable quotas - plenty of disk space available
-                  quota.enable = false;
+                  # Quota configuration with exemptions
+                  quota = {
+                    enable = true;
+                    limit = "10G"; # Default limit for most users
+                    exemptions = [ "niten" ]; # Admins exempt from quota
+                    admin-email = "niten@fudo.org"; # Alert admin when users hit quota
+                  };
                 };
               };
             };
