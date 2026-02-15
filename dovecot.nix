@@ -418,6 +418,13 @@ in {
             paths = [ learnHam learnSpam ];
           };
 
+          # Wrap decode2text.sh with required utilities
+          # The original script needs dirname, grep, and cut which aren't in PATH by default
+          wrappedDecode2Text = pkgs.writeShellScript "decode2text-wrapped.sh" ''
+            export PATH="${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH"
+            exec ${pkgs.dovecot}/libexec/dovecot/decode2text.sh "$@"
+          '';
+
           # Quota warning script - sends alert to admin when user hits quota
           quotaWarningScript = pkgs.writeShellScript "quota-warning" ''
             PERCENT=$1
@@ -588,7 +595,7 @@ in {
           }
 
           service decode2text {
-            executable = script ${pkgs.dovecot}/libexec/dovecot/decode2text.sh
+            executable = script ${wrappedDecode2Text}
             user = ${config.services.dovecot2.user}
             unix_listener decode2text {
               mode = 0666
