@@ -542,6 +542,8 @@ in {
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   admin-conf = "/run/dovecot2/conf.d/admin.conf";
+                  # Disable quotas - plenty of disk space available
+                  quota.enable = false;
                 };
               };
             };
