@@ -608,7 +608,6 @@ in {
                   ports = {
                     milter = antispamPort;
                     controller = antispamControllerPort;
-                    metrics = 5037;
                   };
                   antivirus = {
                     host = "antivirus";
@@ -727,8 +726,10 @@ in {
                     locations = {
                       "/metrics/postfix".proxyPass = "http://smtp:5035/metrics";
                       "/metrics/dovecot".proxyPass = "http://imap:5036/metrics";
+                      # Rspamd serves Prometheus metrics natively from the
+                      # controller worker's /metrics endpoint.
                       "/metrics/rspamd".proxyPass =
-                        "http://antispam:5037/metrics";
+                        "http://antispam:${toString antispamControllerPort}/metrics";
                     };
                   };
                 };

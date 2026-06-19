@@ -224,7 +224,7 @@ All services expose Prometheus metrics:
 
 - Postfix metrics: `:1725/metrics`
 - Dovecot metrics: `:5034/metrics`
-- Rspamd metrics: `:7573/metrics`
+- Rspamd metrics: served natively by the controller worker at `:11334/metrics` (OpenMetrics format)
 
 ### Common Operations
 

@@ -30,10 +30,6 @@ in {
     enable = mkEnableOption "Enable rspamd spam test server.";
 
     ports = {
-      metrics = mkOption {
-        type = port;
-        default = 7573;
-      };
       controller = mkOption {
         type = port;
         default = 11334;
@@ -76,13 +72,14 @@ in {
 
   config = mkIf cfg.enable {
     services = {
-      # Prometheus exporter for monitoring spam filtering metrics
-      prometheus.exporters.rspamd = {
-        enable = true;
-        port = cfg.ports.metrics;
-        extraLabels = { host = cfg.antivirus.host; };
-      };
-
+      # Prometheus metrics are exposed by rspamd itself via the controller
+      # worker's native /metrics endpoint (OpenMetrics format), reachable at
+      # http://<host>:${toString cfg.ports.controller}/metrics.
+      #
+      # The old `services.prometheus.exporters.rspamd` option was removed from
+      # nixpkgs -- it merely scraped the controller's /stat endpoint, which the
+      # built-in /metrics endpoint now replaces. See:
+      # https://docs.rspamd.com/developers/protocol#controller-http-endpoints
       rspamd = {
         enable = true;
 
