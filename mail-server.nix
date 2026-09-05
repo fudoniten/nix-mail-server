@@ -67,6 +67,90 @@ let
     pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
     config.instance.build-seed;
 
+  # Runtime paths for the three files below, shared between the assembly
+  # script and the arion container mounts that read them -- so the path
+  # is written once rather than duplicated at every use site.
+  ldapProxyEnvPath = "/run/mail-server/ldap-proxy/env";
+  dovecotLdapConfigPath = "/run/mail-server/dovecot-secrets/ldap.conf";
+  postfixLdapRecipientsPath =
+    "/run/mail-server/postfix-secrets/ldap-recipients.cf";
+
+  # These three files each need the outpost token or the LDAP bind
+  # password inline, and until now got it via `pkgs.writeText` +
+  # `readFile cfg.ldap.bind-password-file` -- which resolves the secret at
+  # EVAL TIME. That's fine for a value the Nix store can hold in the
+  # clear, but `bind-password-file` (and, when set, `outpost-token-file`)
+  # exist specifically to let the value come from a runtime secrets store
+  # (Aegis) that only populates the path after boot -- nothing exists at
+  # the path when this expression evaluates, so `readFile` threw, or on a
+  # host rebuilding itself with a stale file already sitting in /run from
+  # a previous boot, silently reused whatever secret happened to already
+  # be there. Assembling these at start-up instead, from the actual
+  # runtime paths, is what makes them work the way the "-file" options
+  # advertise.
+  #
+  # jq isn't used here the way the Matrix module uses it for its JWT
+  # fragment: these are Dovecot/Postfix config file formats, not JSON, so
+  # plain shell heredocs do the substitution instead. Nothing interpolated
+  # from Nix here is secret -- authentik-host, bind-dn, base, etc. are
+  # ordinary config -- only the two `$(cat ...)`-read shell variables are.
+  assembleLdapSecrets = pkgs.writeShellScript "mail-ldap-secrets-assembly" ''
+    set -euo pipefail
+    umask 077
+
+    ${if cfg.ldap.outpost-token-file != null then ''
+      TOKEN="$(cat ${escapeShellArg cfg.ldap.outpost-token-file})"
+    '' else ''
+      TOKEN=${escapeShellArg cfg.ldap.outpost-token}
+    ''}
+    BIND_PW="$(cat ${escapeShellArg cfg.ldap.bind-password-file})"
+
+    install -d -m 0755 "$(dirname ${escapeShellArg ldapProxyEnvPath})"
+    install -d -m 0755 "$(dirname ${escapeShellArg dovecotLdapConfigPath})"
+    install -d -m 0755 \
+      "$(dirname ${escapeShellArg postfixLdapRecipientsPath})"
+
+    # World-readable to match the containers' expectations: they run as
+    # in-container UIDs with no fixed relationship to the host, the same
+    # reason the tmpfiles rules these replace copied everything 0644.
+    cat > ${escapeShellArg ldapProxyEnvPath} <<EOF
+    AUTHENTIK_HOST=${cfg.ldap.authentik-host}
+    AUTHENTIK_TOKEN=$TOKEN
+    AUTHENTIK_INSECURE=false
+    EOF
+    chmod 0644 ${escapeShellArg ldapProxyEnvPath}
+
+    cat > ${escapeShellArg dovecotLdapConfigPath} <<EOF
+    uris = ldap://ldap-proxy:3389
+    ldap_version = 3
+    dn = ${cfg.ldap.bind-dn}
+    dnpass = $BIND_PW
+    auth_bind = yes
+    auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}
+    base = ${cfg.ldap.base}
+    user_filter = (&(objectClass=organizationalPerson)(cn=%n))
+    pass_filter = (&(objectClass=organizationalPerson)(cn=%n))
+    pass_attrs = =user=%{ldap:cn}
+    user_attrs = =user=%{ldap:cn}
+    EOF
+    chmod 0644 ${escapeShellArg dovecotLdapConfigPath}
+
+    cat > ${escapeShellArg postfixLdapRecipientsPath} <<EOF
+    server_host = ldap-proxy
+    server_port = 3389
+    version = 3
+    bind = yes
+    bind_dn = ${cfg.ldap.bind-dn}
+    bind_pw = $BIND_PW
+    search_base = ${cfg.ldap.user-ou},${cfg.ldap.base}
+    scope = sub
+    query_filter = (&(objectClass=organizationalPerson)(cn=%u))
+    result_attribute = cn
+    result_format = OK
+    EOF
+    chmod 0644 ${escapeShellArg postfixLdapRecipientsPath}
+    '';
+
 in {
   options.fudo.mail = with types; {
     enable = mkEnableOption "Enable mail server.";
@@ -215,8 +299,31 @@ in {
       };
 
       outpost-token = mkOption {
-        type = str;
-        description = "Token with which to authenticate to the Authentik host.";
+        type = nullOr str;
+        description = ''
+          Token with which to authenticate to the Authentik host, as a
+          literal value baked into the Nix store at build time.
+
+          Mutually exclusive with outpost-token-file: set that one instead
+          when the token comes from a runtime secrets store (Aegis, etc.)
+          that only populates its target path after boot, rather than
+          something safe to embed in the store.
+        '';
+        default = null;
+      };
+
+      outpost-token-file = mkOption {
+        type = nullOr str;
+        description = ''
+          Path to a file containing the Authentik outpost token, read at
+          service start-up rather than embedded in the Nix store. Use this
+          instead of outpost-token when the file is populated at runtime
+          by something other than this module (Aegis, etc.) -- it need not
+          exist at build time.
+
+          Mutually exclusive with outpost-token.
+        '';
+        default = null;
       };
 
       bind-dn = mkOption {
@@ -226,8 +333,12 @@ in {
 
       bind-password-file = mkOption {
         type = str;
-        description =
-          "File containing password with which to bind with the LDAP server.";
+        description = ''
+          File containing password with which to bind with the LDAP
+          server, read at service start-up. Need not exist at build time
+          -- this is what lets it be a secret delivered at boot (Aegis,
+          etc.) rather than one baked into the Nix store.
+        '';
       };
 
       base = mkOption {
@@ -302,52 +413,25 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = [{
+      assertion = (cfg.ldap.outpost-token == null)
+        != (cfg.ldap.outpost-token-file == null);
+      message = ''
+        fudo.mail.ldap: set exactly one of outpost-token (a literal value)
+        or outpost-token-file (a runtime path) -- not both, or neither.
+        Setting both would leave it ambiguous which one actually reaches
+        the LDAP proxy; setting neither leaves it with no token at all.
+      '';
+    }];
+
+    # mailLdapProxyEnv, dovecotLdapConfig and postfixLdapRecipients used to
+    # live here too, built via `pkgs.writeText` + `readFile
+    # cfg.ldap.bind-password-file` -- which resolves the secret at EVAL
+    # TIME, baking it into the Nix store. `assembleLdapSecrets` (systemd
+    # service below) replaces them, assembling the same three files at
+    # start-up instead, from whatever `bind-password-file` and
+    # `outpost-token-file` point at when the service actually runs.
     fudo.secrets.host-secrets."${hostname}" = {
-      mailLdapProxyEnv = {
-        source-file = pkgs.writeText "ldap-proxy.env" ''
-          AUTHENTIK_HOST=${cfg.ldap.authentik-host}
-          AUTHENTIK_TOKEN=${cfg.ldap.outpost-token}
-          AUTHENTIK_INSECURE=false
-        '';
-        target-file = "/run/mail-server/ldap-proxy/env";
-      };
-
-      dovecotLdapConfig = {
-        source-file = pkgs.writeText "dovecot-ldap.conf"
-          (concatStringsSep "\n" [
-            "uris = ldap://ldap-proxy:3389"
-            "ldap_version = 3"
-            "dn = ${cfg.ldap.bind-dn}"
-            "dnpass = ${readFile cfg.ldap.bind-password-file}"
-            "auth_bind = yes"
-            "auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}"
-            "base = ${cfg.ldap.base}"
-            "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_attrs = =user=%{ldap:cn}"
-            "user_attrs = =user=%{ldap:cn}"
-          ]);
-        target-file = "/run/mail-server/dovecot-secrets/ldap.conf";
-      };
-
-      postfixLdapRecipients = {
-        source-file = pkgs.writeText "postfix-ldap-recipients.cf"
-          (concatStringsSep "\n" [
-            "server_host = ldap-proxy"
-            "server_port = 3389"
-            "version = 3"
-            "bind = yes"
-            "bind_dn = ${cfg.ldap.bind-dn}"
-            "bind_pw = ${readFile cfg.ldap.bind-password-file}"
-            "search_base = ${cfg.ldap.user-ou},${cfg.ldap.base}"
-            "scope = sub"
-            "query_filter = (&(objectClass=organizationalPerson)(cn=%u))"
-            "result_attribute = cn"
-            "result_format = OK"
-          ]);
-        target-file = "/run/mail-server/postfix-secrets/ldap-recipients.cf";
-      };
-
       dovecotAdminConfig = {
         source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
           ([ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
@@ -377,12 +461,41 @@ in {
       "d /run/mail-server/postfix-secrets          0755 - - - -"
       "d /run/mail-server/redis                    0755 - - - -"
       # Secret files - copy with world-readable permissions so container users can access
-      "C+ ${hostSecrets.mailLdapProxyEnv.target-file}        0644 root root - ${hostSecrets.mailLdapProxyEnv.source-file}"
-      "C+ ${hostSecrets.dovecotLdapConfig.target-file}       0644 root root - ${hostSecrets.dovecotLdapConfig.source-file}"
-      "C+ ${hostSecrets.postfixLdapRecipients.target-file}   0644 root root - ${hostSecrets.postfixLdapRecipients.source-file}"
+      #
+      # mailLdapProxyEnv, dovecotLdapConfig and postfixLdapRecipients are
+      # NOT copied here: assembleLdapSecrets (below) writes them directly
+      # to their target paths at start-up, from wherever bind-password-file
+      # / outpost-token-file actually resolve to that boot.
       "C+ ${hostSecrets.dovecotAdminConfig.target-file}      0644 root root - ${hostSecrets.dovecotAdminConfig.source-file}"
       "C+ ${hostSecrets.redisPasswd.target-file}             0644 root root - ${hostSecrets.redisPasswd.source-file}"
     ];
+
+    # Ordered `before`/`requiredBy` the arion project's own unit rather than
+    # the other way around, so this works regardless of what else orders
+    # against arion-mail-server -- the same reasoning matrix-module's
+    # matrix-jwt-config uses for its own boot-time secret assembly.
+    # Deliberately no ConditionPathExists on either secret path: a skipped
+    # unit counts as satisfied, so the containers would start anyway and
+    # fail on a missing/empty config file with a far less obvious error.
+    #
+    # `after = [ "aegis-secrets.target" ]` and not `requires`: this module
+    # has no idea whether the host it's running on uses Aegis at all, and
+    # ordering after a target that doesn't exist is a harmless no-op, while
+    # requiring one would turn "Aegis isn't in use here" into a hard
+    # failure.
+    systemd.services.mail-ldap-secrets = {
+      description =
+        "Assemble the mail server's LDAP-derived runtime secrets.";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "arion-mail-server.service" ];
+      requiredBy = [ "arion-mail-server.service" ];
+      after = [ "aegis-secrets.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = assembleLdapSecrets;
+      };
+    };
 
     # Fail2ban configuration for brute force protection
     services.fail2ban = mkIf cfg.fail2ban.enable {
@@ -445,8 +558,8 @@ in {
               ];
               capabilities.SYS_ADMIN = true;
               volumes = [
-                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${hostSecrets.postfixLdapRecipients.target-file}:/run/mail-server/ldap-recipients.cf:ro"
+                "${dovecotLdapConfigPath}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${postfixLdapRecipientsPath}:/run/mail-server/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
@@ -527,7 +640,7 @@ in {
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
-                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${dovecotLdapConfigPath}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${hostSecrets.dovecotAdminConfig.target-file}:/run/dovecot2/conf.d/admin.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
@@ -583,7 +696,7 @@ in {
               "external_network"
               "ldap_network"
             ];
-            env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
+            env_file = [ ldapProxyEnvPath ];
           };
           antispam = {
             service = {
