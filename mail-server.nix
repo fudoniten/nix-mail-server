@@ -40,32 +40,148 @@
 #
 # Security Model:
 # - Each service runs in isolated container with minimal capabilities
-# - Secrets managed via Nix (WARNING: stored in Nix store)
+# - Secrets requiring external coordination (LDAP bind password, Authentik
+#   outpost token) come from a runtime secrets store, read at start-up.
+#   Internal-only secrets (Dovecot's admin password, the Redis password
+#   this module and rspamd.nix share) still default to a value derived
+#   from build-seed and embedded in the Nix store, but can be pointed at a
+#   runtime secrets store too via the internal-secrets.*-file options.
 # - TLS required for all client connections (submission/IMAP)
 # - SASL authentication via LDAP
 # - Multi-layer spam/abuse prevention
 # - Regular virus database updates
-#
-# TODO: Move secrets to runtime injection (systemd LoadCredential, etc.)
 
 with lib;
 let
   cfg = config.fudo.mail;
-  hostname = config.instance.hostname;
-  hostSecrets = config.fudo.secrets.host-secrets."${hostname}";
 
-  # Auto-generated passwords for internal services
-  # WARNING: These are deterministic based on build-seed and stored in Nix store
-  # Consider migrating to runtime secret injection
-  dovecotAdminPasswd =
-    pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
-    config.instance.build-seed;
-  dovecotApiKey = pkgs.lib.passwd.stablerandom-passwd-file "dovecot-api-key"
-    config.instance.build-seed;
+  # Three internal-only secrets: nothing outside this module (and, for the
+  # Redis password, rspamd.nix) ever needs to agree on their value, so
+  # unlike the LDAP secrets above they default to one generated
+  # deterministically from build-seed rather than requiring a caller to
+  # supply one. Each internal-secrets.*-file option lets a caller point at
+  # a runtime secrets store instead; when it does, that path is what gets
+  # `cat`'d below, in place of the build-seed-derived store path. Either
+  # way the *value* is only ever read at start-up now, never baked into
+  # one of the generated config files at eval time -- a Nix store path is
+  # just as readable by `cat` at boot as a runtime-only one is, so there's
+  # no reason for the two cases to take different code paths.
+  dovecotAdminPasswdPath = toString
+    (if cfg.internal-secrets.dovecot-admin-password-file != null then
+      cfg.internal-secrets.dovecot-admin-password-file
+    else
+      pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
+      config.instance.build-seed);
 
-  redisPasswdFile =
+  dovecotApiKeyPath = toString
+    (if cfg.internal-secrets.dovecot-api-key-file != null then
+      cfg.internal-secrets.dovecot-api-key-file
+    else
+      pkgs.lib.passwd.stablerandom-passwd-file "dovecot-api-key"
+      config.instance.build-seed);
+
+  redisPasswdPath = toString (if cfg.internal-secrets.redis-password-file
+    != null then
+    cfg.internal-secrets.redis-password-file
+  else
     pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
-    config.instance.build-seed;
+    config.instance.build-seed);
+
+  # Runtime paths for the four files below, shared between the assembly
+  # script and the arion container mounts that read them -- so the path
+  # is written once rather than duplicated at every use site.
+  ldapProxyEnvPath = "/run/mail-server/ldap-proxy/env";
+  dovecotLdapConfigPath = "/run/mail-server/dovecot-secrets/ldap.conf";
+  dovecotAdminConfigPath = "/run/mail-server/dovecot-secrets/admin.conf";
+  postfixLdapRecipientsPath =
+    "/run/mail-server/postfix-secrets/ldap-recipients.cf";
+
+  # These four files each need a secret inline, and until now got it via
+  # `pkgs.writeText` + `readFile cfg.ldap.bind-password-file` (or
+  # `dovecotAdminPasswdPath`/`dovecotApiKeyPath`) -- which resolves the
+  # value at EVAL TIME. That's fine for a value the Nix store can hold in
+  # the clear, but `bind-password-file` (and, when set, `outpost-token-file`
+  # or an internal-secrets.*-file) exist specifically to let the value come
+  # from a runtime secrets store (Aegis) that only populates the path after
+  # boot -- nothing exists at the path when this expression evaluates, so
+  # `readFile` threw, or on a host rebuilding itself with a stale file
+  # already sitting in /run from a previous boot, silently reused whatever
+  # secret happened to already be there. Assembling these at start-up
+  # instead, from the actual runtime paths, is what makes them work the way
+  # the "-file" options advertise.
+  #
+  # jq isn't used here the way the Matrix module uses it for its JWT
+  # fragment: these are Dovecot/Postfix config file formats, not JSON, so
+  # plain shell heredocs do the substitution instead. Nothing interpolated
+  # from Nix here is secret -- authentik-host, bind-dn, base, etc. are
+  # ordinary config -- only the `$(cat ...)`-read shell variables are.
+  assembleMailSecrets = pkgs.writeShellScript "mail-secrets-assembly" ''
+    set -euo pipefail
+    umask 077
+
+    ${if cfg.ldap.outpost-token-file != null then ''
+      TOKEN="$(cat ${escapeShellArg cfg.ldap.outpost-token-file})"
+    '' else ''
+      TOKEN=${escapeShellArg cfg.ldap.outpost-token}
+    ''}
+    BIND_PW="$(cat ${escapeShellArg cfg.ldap.bind-password-file})"
+    ADMIN_PW="$(cat ${escapeShellArg dovecotAdminPasswdPath})"
+    ${optionalString (cfg.imap.api-port != null) ''
+      API_KEY="$(cat ${escapeShellArg dovecotApiKeyPath})"
+    ''}
+
+    install -d -m 0755 "$(dirname ${escapeShellArg ldapProxyEnvPath})"
+    install -d -m 0755 "$(dirname ${escapeShellArg dovecotLdapConfigPath})"
+    install -d -m 0755 \
+      "$(dirname ${escapeShellArg postfixLdapRecipientsPath})"
+
+    # World-readable to match the containers' expectations: they run as
+    # in-container UIDs with no fixed relationship to the host, the same
+    # reason the tmpfiles rules these replace copied everything 0644.
+    cat > ${escapeShellArg ldapProxyEnvPath} <<EOF
+    AUTHENTIK_HOST=${cfg.ldap.authentik-host}
+    AUTHENTIK_TOKEN=$TOKEN
+    AUTHENTIK_INSECURE=false
+    EOF
+    chmod 0644 ${escapeShellArg ldapProxyEnvPath}
+
+    cat > ${escapeShellArg dovecotLdapConfigPath} <<EOF
+    uris = ldap://ldap-proxy:3389
+    ldap_version = 3
+    dn = ${cfg.ldap.bind-dn}
+    dnpass = $BIND_PW
+    auth_bind = yes
+    auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}
+    base = ${cfg.ldap.base}
+    user_filter = (&(objectClass=organizationalPerson)(cn=%n))
+    pass_filter = (&(objectClass=organizationalPerson)(cn=%n))
+    pass_attrs = =user=%{ldap:cn}
+    user_attrs = =user=%{ldap:cn}
+    EOF
+    chmod 0644 ${escapeShellArg dovecotLdapConfigPath}
+
+    cat > ${escapeShellArg postfixLdapRecipientsPath} <<EOF
+    server_host = ldap-proxy
+    server_port = 3389
+    version = 3
+    bind = yes
+    bind_dn = ${cfg.ldap.bind-dn}
+    bind_pw = $BIND_PW
+    search_base = ${cfg.ldap.user-ou},${cfg.ldap.base}
+    scope = sub
+    query_filter = (&(objectClass=organizationalPerson)(cn=%u))
+    result_attribute = cn
+    result_format = OK
+    EOF
+    chmod 0644 ${escapeShellArg postfixLdapRecipientsPath}
+
+    cat > ${escapeShellArg dovecotAdminConfigPath} <<EOF
+    doveadm_password = $ADMIN_PW
+    ${optionalString (cfg.imap.api-port != null)
+      "doveadm_api_key = \$API_KEY"}
+    EOF
+    chmod 0644 ${escapeShellArg dovecotAdminConfigPath}
+    '';
 
 in {
   options.fudo.mail = with types; {
@@ -215,8 +331,31 @@ in {
       };
 
       outpost-token = mkOption {
-        type = str;
-        description = "Token with which to authenticate to the Authentik host.";
+        type = nullOr str;
+        description = ''
+          Token with which to authenticate to the Authentik host, as a
+          literal value baked into the Nix store at build time.
+
+          Mutually exclusive with outpost-token-file: set that one instead
+          when the token comes from a runtime secrets store (Aegis, etc.)
+          that only populates its target path after boot, rather than
+          something safe to embed in the store.
+        '';
+        default = null;
+      };
+
+      outpost-token-file = mkOption {
+        type = nullOr str;
+        description = ''
+          Path to a file containing the Authentik outpost token, read at
+          service start-up rather than embedded in the Nix store. Use this
+          instead of outpost-token when the file is populated at runtime
+          by something other than this module (Aegis, etc.) -- it need not
+          exist at build time.
+
+          Mutually exclusive with outpost-token.
+        '';
+        default = null;
       };
 
       bind-dn = mkOption {
@@ -226,8 +365,12 @@ in {
 
       bind-password-file = mkOption {
         type = str;
-        description =
-          "File containing password with which to bind with the LDAP server.";
+        description = ''
+          File containing password with which to bind with the LDAP
+          server, read at service start-up. Need not exist at build time
+          -- this is what lets it be a secret delivered at boot (Aegis,
+          etc.) rather than one baked into the Nix store.
+        '';
       };
 
       base = mkOption {
@@ -246,6 +389,41 @@ in {
         type = str;
         description = "Organizational unit containing users.";
         default = "ou=groups";
+      };
+    };
+
+    internal-secrets = {
+      dovecot-admin-password-file = mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Runtime path to Dovecot's doveadm admin password, read at
+          start-up. Nothing outside this module needs to agree on this
+          value, so when left null (the default) one is generated
+          deterministically from build-seed instead -- fine for a value
+          nothing external reads, but not a real secret at rest. Set this
+          to use a real secrets store (Aegis, etc.) instead.
+        '';
+      };
+
+      dovecot-api-key-file = mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Same as dovecot-admin-password-file, for doveadm's HTTP API key.
+          Only read when imap.api-port is set.
+        '';
+      };
+
+      redis-password-file = mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Runtime path to the password securing this mail server's
+          internal Redis instance (shared by rspamd's statistics/fuzzy-hash
+          storage and Dovecot), read at start-up. Left null by default for
+          the same reason as dovecot-admin-password-file.
+        '';
       };
     };
 
@@ -302,66 +480,29 @@ in {
   };
 
   config = mkIf cfg.enable {
-    fudo.secrets.host-secrets."${hostname}" = {
-      mailLdapProxyEnv = {
-        source-file = pkgs.writeText "ldap-proxy.env" ''
-          AUTHENTIK_HOST=${cfg.ldap.authentik-host}
-          AUTHENTIK_TOKEN=${cfg.ldap.outpost-token}
-          AUTHENTIK_INSECURE=false
-        '';
-        target-file = "/run/mail-server/ldap-proxy/env";
-      };
+    assertions = [{
+      assertion = (cfg.ldap.outpost-token == null)
+        != (cfg.ldap.outpost-token-file == null);
+      message = ''
+        fudo.mail.ldap: set exactly one of outpost-token (a literal value)
+        or outpost-token-file (a runtime path) -- not both, or neither.
+        Setting both would leave it ambiguous which one actually reaches
+        the LDAP proxy; setting neither leaves it with no token at all.
+      '';
+    }];
 
-      dovecotLdapConfig = {
-        source-file = pkgs.writeText "dovecot-ldap.conf"
-          (concatStringsSep "\n" [
-            "uris = ldap://ldap-proxy:3389"
-            "ldap_version = 3"
-            "dn = ${cfg.ldap.bind-dn}"
-            "dnpass = ${readFile cfg.ldap.bind-password-file}"
-            "auth_bind = yes"
-            "auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}"
-            "base = ${cfg.ldap.base}"
-            "user_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_filter = (&(objectClass=organizationalPerson)(cn=%n))"
-            "pass_attrs = =user=%{ldap:cn}"
-            "user_attrs = =user=%{ldap:cn}"
-          ]);
-        target-file = "/run/mail-server/dovecot-secrets/ldap.conf";
-      };
-
-      postfixLdapRecipients = {
-        source-file = pkgs.writeText "postfix-ldap-recipients.cf"
-          (concatStringsSep "\n" [
-            "server_host = ldap-proxy"
-            "server_port = 3389"
-            "version = 3"
-            "bind = yes"
-            "bind_dn = ${cfg.ldap.bind-dn}"
-            "bind_pw = ${readFile cfg.ldap.bind-password-file}"
-            "search_base = ${cfg.ldap.user-ou},${cfg.ldap.base}"
-            "scope = sub"
-            "query_filter = (&(objectClass=organizationalPerson)(cn=%u))"
-            "result_attribute = cn"
-            "result_format = OK"
-          ]);
-        target-file = "/run/mail-server/postfix-secrets/ldap-recipients.cf";
-      };
-
-      dovecotAdminConfig = {
-        source-file = pkgs.writeText "dovecot-admin.conf" (concatStringsSep "\n"
-          ([ "doveadm_password = ${readFile dovecotAdminPasswd}" ]
-            ++ (optional (cfg.imap.api-port != null)
-              "doveadm_api_key = ${readFile dovecotApiKey}")));
-        target-file = "/run/mail-server/dovecot-secrets/admin.conf";
-      };
-
-      redisPasswd = {
-        source-file = redisPasswdFile;
-        target-file = "/run/mail-server/redis/passwd";
-      };
-    };
-
+    # mailLdapProxyEnv, dovecotLdapConfig, postfixLdapRecipients,
+    # dovecotAdminConfig and redisPasswd all used to live here (or, for
+    # redisPasswd, get bind-mounted from a build-seed-derived store path
+    # directly), the first four built via `pkgs.writeText` + `readFile` --
+    # which resolves the secret at EVAL TIME, baking it into the Nix store.
+    # `assembleMailSecrets` (systemd service below) replaces the composed
+    # ones, assembling the same files at start-up instead, from whatever
+    # `bind-password-file`, `outpost-token-file` and the internal-secrets
+    # options point at when the service actually runs. redisPasswd needs no
+    # such assembly -- it's a bare value, not a composed file -- so it's
+    # just bind-mounted straight from `redisPasswdPath` into the containers
+    # that need it, below.
     networking.firewall = { allowedTCPPorts = [ 25 143 465 587 993 ]; };
 
     systemd.tmpfiles.rules = [
@@ -370,19 +511,40 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
-      # Secret directories for container mounts
+      # Secret directories for container mounts. assembleMailSecrets
+      # writes directly to these -- nothing left here needs a "C+" copy
+      # rule the way the legacy host-secrets pipeline used.
       "d /run/mail-server                          0755 - - - -"
       "d /run/mail-server/ldap-proxy               0755 - - - -"
       "d /run/mail-server/dovecot-secrets          0755 - - - -"
       "d /run/mail-server/postfix-secrets          0755 - - - -"
-      "d /run/mail-server/redis                    0755 - - - -"
-      # Secret files - copy with world-readable permissions so container users can access
-      "C+ ${hostSecrets.mailLdapProxyEnv.target-file}        0644 root root - ${hostSecrets.mailLdapProxyEnv.source-file}"
-      "C+ ${hostSecrets.dovecotLdapConfig.target-file}       0644 root root - ${hostSecrets.dovecotLdapConfig.source-file}"
-      "C+ ${hostSecrets.postfixLdapRecipients.target-file}   0644 root root - ${hostSecrets.postfixLdapRecipients.source-file}"
-      "C+ ${hostSecrets.dovecotAdminConfig.target-file}      0644 root root - ${hostSecrets.dovecotAdminConfig.source-file}"
-      "C+ ${hostSecrets.redisPasswd.target-file}             0644 root root - ${hostSecrets.redisPasswd.source-file}"
     ];
+
+    # Ordered `before`/`requiredBy` the arion project's own unit rather than
+    # the other way around, so this works regardless of what else orders
+    # against arion-mail-server -- the same reasoning matrix-module's
+    # matrix-jwt-config uses for its own boot-time secret assembly.
+    # Deliberately no ConditionPathExists on any secret path: a skipped
+    # unit counts as satisfied, so the containers would start anyway and
+    # fail on a missing/empty config file with a far less obvious error.
+    #
+    # `after = [ "aegis-secrets.target" ]` and not `requires`: this module
+    # has no idea whether the host it's running on uses Aegis at all, and
+    # ordering after a target that doesn't exist is a harmless no-op, while
+    # requiring one would turn "Aegis isn't in use here" into a hard
+    # failure.
+    systemd.services.mail-secrets = {
+      description = "Assemble the mail server's composed runtime secrets.";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "arion-mail-server.service" ];
+      requiredBy = [ "arion-mail-server.service" ];
+      after = [ "aegis-secrets.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = assembleMailSecrets;
+      };
+    };
 
     # Fail2ban configuration for brute force protection
     services.fail2ban = mkIf cfg.fail2ban.enable {
@@ -445,8 +607,8 @@ in {
               ];
               capabilities.SYS_ADMIN = true;
               volumes = [
-                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${hostSecrets.postfixLdapRecipients.target-file}:/run/mail-server/ldap-recipients.cf:ro"
+                "${dovecotLdapConfigPath}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${postfixLdapRecipientsPath}:/run/mail-server/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
@@ -527,8 +689,8 @@ in {
               ports = [ "143:143" "993:993" ];
               volumes = [
                 "${cfg.state-directory}/dovecot:/state"
-                "${hostSecrets.dovecotLdapConfig.target-file}:/run/dovecot2/conf.d/ldap.conf:ro"
-                "${hostSecrets.dovecotAdminConfig.target-file}:/run/dovecot2/conf.d/admin.conf:ro"
+                "${dovecotLdapConfigPath}:/run/dovecot2/conf.d/ldap.conf:ro"
+                "${dovecotAdminConfigPath}:/run/dovecot2/conf.d/admin.conf:ro"
                 "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
@@ -583,7 +745,7 @@ in {
               "external_network"
               "ldap_network"
             ];
-            env_file = [ hostSecrets.mailLdapProxyEnv.target-file ];
+            env_file = [ ldapProxyEnvPath ];
           };
           antispam = {
             service = {
@@ -595,6 +757,11 @@ in {
               ];
               capabilities.SYS_ADMIN = true;
               depends_on = [ "antivirus" "redis" ];
+              # Gives rspamd.nix's own boot-time assembly (redis.password-file,
+              # read inside the container) something to read -- the container
+              # sees it at this path regardless of whether redisPasswdPath is
+              # a build-seed store path or an Aegis runtime one on the host.
+              volumes = [ "${redisPasswdPath}:/run/redis-client/passwd:ro" ];
             };
             nixos = {
               useSystemd = true;
@@ -616,7 +783,7 @@ in {
                   redis = {
                     host = "redis";
                     port = redisPort;
-                    password = readFile redisPasswdFile;
+                    password-file = "/run/redis-client/passwd";
                   };
                 };
               };
@@ -674,7 +841,7 @@ in {
             service = {
               volumes = [
                 "${cfg.state-directory}/redis:/var/lib/redis"
-                "${hostSecrets.redisPasswd.target-file}:/run/redis/passwd"
+                "${redisPasswdPath}:/run/redis/passwd:ro"
               ];
               networks = [ "redis_network" ];
               capabilities.SYS_ADMIN = true;
