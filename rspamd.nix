@@ -64,13 +64,68 @@ in {
       };
 
       password = mkOption {
-        type = str;
-        description = "Password with which to connect to Redis.";
+        type = nullOr str;
+        default = null;
+        description = ''
+          Password with which to connect to Redis, as a literal value
+          baked into the Nix store. Mutually exclusive with password-file;
+          prefer that when the password comes from a runtime secrets
+          store (Aegis, etc.) rather than something safe to embed in the
+          store.
+        '';
+      };
+
+      password-file = mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Path to a file containing the Redis password, read at start-up
+          rather than embedded in the Nix store. Mutually exclusive with
+          password.
+        '';
       };
     };
   };
 
   config = mkIf cfg.enable {
+    assertions = [{
+      assertion = (cfg.redis.password == null) != (cfg.redis.password-file
+        == null);
+      message = ''
+        fudo.mail.rspamd.redis: set exactly one of password (a literal
+        value) or password-file (a runtime path) -- not both, or neither.
+      '';
+    }];
+
+    # rspamd merges every file under local.d/ (which is what `locals`
+    # writes into) at its own start-up, so the password can be handed to
+    # it as a SEPARATE file from the one `locals."redis.conf"` manages --
+    # written by a plain systemd unit that reads the runtime path when the
+    # service actually starts, rather than baked into the Nix-managed
+    # config file at eval time the way it used to be. No ConditionPathExists:
+    # a skipped unit counts as satisfied, so rspamd would start anyway and
+    # fail to authenticate to Redis with a far less obvious error.
+    systemd.services.rspamd-redis-password = mkIf (cfg.redis.password-file
+      != null) {
+      description = "Assemble rspamd's Redis password from its runtime secret.";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "rspamd.service" ];
+      requiredBy = [ "rspamd.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "rspamd-redis-password" ''
+          set -euo pipefail
+          umask 077
+          install -d -m 0755 /etc/rspamd/local.d
+          PASSWORD="$(cat ${escapeShellArg cfg.redis.password-file})"
+          printf 'password = "%s";\n' "$PASSWORD" \
+            > /etc/rspamd/local.d/redis-password.conf
+          chmod 0644 /etc/rspamd/local.d/redis-password.conf
+        '';
+      };
+    };
+
     services = {
       # Prometheus metrics are exposed by rspamd itself via the controller
       # worker's native /metrics endpoint (OpenMetrics format), reachable at
@@ -118,12 +173,18 @@ in {
           # Headers include scores, symbols matched, and individual test results
           "milter_headers.conf".text = "extended_spam_headers = yes;";
 
-          # Redis for Bayes statistics, neural network, and reputation data
-          # Redis provides fast, persistent storage for learning and scoring
-          # WARNING: Password is embedded in Nix store (world-readable)
-          # TODO: Use runtime secret injection instead
+          # Redis for Bayes statistics, neural network, and reputation data.
+          # Redis provides fast, persistent storage for learning and scoring.
+          #
+          # The password is deliberately NOT set here when password-file is
+          # used: rspamd merges every file under local.d/ at its own
+          # start-up, and systemd.services.rspamd-redis-password (below)
+          # writes a second one, redis-password.conf, from the runtime
+          # secret when it's actually available -- not baked into this
+          # Nix-store-embedded file at eval time.
           "redis.conf".text = ''
             servers = "${cfg.redis.host}:${toString cfg.redis.port}";
+          '' + optionalString (cfg.redis.password != null) ''
             password = "${cfg.redis.password}";
           '';
 
