@@ -295,6 +295,22 @@ in {
       default = 5034;
     };
 
+    antispam = {
+      hyperscan = mkOption {
+        type = bool;
+        default = true;
+        description = ''
+          Build rspamd with hyperscan (vectorscan) regex acceleration.
+
+          Vectorscan's x86_64 baseline needs SSE4.2 + POPCNT, so on a
+          pre-Nehalem CPU (a Core 2-era Xeon, say) rspamd built with it
+          dies with SIGILL. Set this false on such hardware: rspamd falls
+          back to PCRE matching, slower but functional. Passed through to
+          fudo.mail.rspamd.hyperscan inside the antispam container.
+        '';
+      };
+    };
+
     trusted-networks = mkOption {
       type = listOf str;
       description = "List of networks to be considered trusted.";
@@ -772,6 +788,7 @@ in {
                 networking.firewall.enable = false;
                 fudo.mail.rspamd = {
                   enable = true;
+                  inherit (cfg.antispam) hyperscan;
                   ports = {
                     milter = antispamPort;
                     controller = antispamControllerPort;
