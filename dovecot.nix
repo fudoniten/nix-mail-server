@@ -244,11 +244,9 @@ in {
       };
     };
 
-    max-user-connections = mkOption {
-      type = int;
-      description = "Maximum allowed simultaneous connections by one user.";
-      default = 5;
-    };
+    # A `max-user-connections` option lived here. Nothing consumed it --
+    # no mail_max_userip_connections was ever emitted -- so it advertised
+    # a limit this module does not impose.
 
     ldap-conf = mkOption {
       type = str;
@@ -295,7 +293,7 @@ in {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0711 root root - -"
         "d ${cfg.mail-directory}         0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/sieves 0750 ${dovecotUser} ${dovecotGroup} - -"
+        "d ${sieveDirectory} 0750 ${dovecotUser} ${dovecotGroup} - -"
       ];
 
       # Prometheus exporter must start after Dovecot is ready.
@@ -346,36 +344,16 @@ in {
         learnHam = teachRspamd "learn_ham";
         learnSpam = teachRspamd "learn_spam";
 
-        reportSpam = builtins.toFile "spam.sieve" ''
-          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
-
-          if environment :matches "imap.user" "*" {
-            set "username" "''${1}";
-          }
-
-          pipe :copy "rspamd_learn_spam" [ "''${username}" ];
-        '';
-        reportHam = builtins.toFile "ham.sieve" ''
-          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
-
-          if environment :matches "imap.mailbox" "*" {
-            set "mailbox" "''${1}";
-          }
-
-          if string "''${mailbox}" "Trash" {
-            stop;
-          }
-
-          if string "''${mailbox}" "Junk" {
-            stop;
-          }
-
-          if environment :matches "imap.user" "*" {
-            set "username" "''${1}";
-          }
-
-          pipe :copy "rspamd_learn_ham" [ "''${username}" ];
-        '';
+        # The three Sieve scripts live in ./sieves as real files rather
+        # than as heredocs here. They used to be inline, duplicated
+        # verbatim by unreferenced copies in that directory -- two sources
+        # of truth, one of which nothing read and neither of which could
+        # drift visibly. As paths they also stop needing the escape dance
+        # that Nix string interpolation forces on Sieve's own ${...}
+        # variables.
+        reportSpam = ./sieves/spam.sieve;
+        reportHam = ./sieves/ham.sieve;
+        fileSpam = ./sieves/file-spam.sieve;
 
         # Wrap decode2text.sh with required utilities
         # The original script needs dirname, grep, and cut which aren't in PATH by default
@@ -475,6 +453,17 @@ in {
             fts_tokenizer_generic = algorithm=simple maxlen=30
             fts_tokenizer_email_address = maxlen=100
 
+            # Sieve. Dovecot merges repeated `plugin` sections, so the
+            # three this file used to emit were one section written in
+            # three places; they are collected here instead.
+            sieve = file:${sieveDirectory}/%u/scripts;active=${sieveDirectory}/%u/active.sieve
+            sieve_default_name = default
+
+            # old_stats, which feeds the Prometheus exporter via the
+            # `service old-stats` sockets below.
+            old_stats_refresh = 30 secs
+            old_stats_track_cmds = yes
+
             ${
               optionalString cfg.quota.enable ''
                 # Quota configuration
@@ -563,12 +552,6 @@ in {
             }
           }
 
-          plugin {
-            sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
-            # sieve_default = file:${sieveDirectory}/%u/default.sieve
-            sieve_default_name = default
-          }
-
           service decode2text {
             executable = script ${wrappedDecode2Text}
             user = ${dovecotUser}
@@ -599,11 +582,6 @@ in {
               user = ${dovecotUser}
               group = ${dovecotGroup}
             }
-          }
-
-          plugin {
-            old_stats_refresh = 30 secs
-            old_stats_track_cmds = yes
           }
         '';
 
@@ -665,16 +643,7 @@ in {
           # Replaces the hand-rolled buildEnv + sieve_pipe_bin_dir: the module
           # builds the same link farm and adds sieve_extprograms for us.
           pipeBins = map getExe [ learnHam learnSpam ];
-          scripts = {
-            after = builtins.toFile "spam.sieve" ''
-              require [ "fileinto" ];
-
-              if header :is "X-Spam" "Yes" {
-                fileinto "Junk";
-                stop;
-              }
-            '';
-          };
+          scripts.after = fileSpam;
         };
 
         # Everything below was a dedicated option before 26.05 rewrote this

@@ -275,13 +275,20 @@ in {
         # rather than override it, which is the reverse of how extraConfig
         # behaved. Don't reintroduce anything the module also sets.
         settings = {
-          # This instance authenticates; it stores nothing. The pre-26.05
-          # module emitted `protocols = imap` (enableImap defaulted true) and,
-          # because no certificate was configured, `ssl = no` with
-          # `disable_plaintext_auth = no`. Left unsaid, Dovecot 2.3 would
-          # instead default to imap+pop3+lmtp with ssl = yes and no cert to
-          # serve.
-          protocols = [ "imap" ];
+          # This instance authenticates; it stores nothing, so it serves no
+          # protocols at all -- only `service auth`, which is what Postfix
+          # talks to over /run/dovecot2/auth. An empty list renders as a
+          # literal `protocols = ` line (the module emits empty lists
+          # rather than dropping them), which is Dovecot's documented
+          # auth-only configuration.
+          #
+          # It used to say `protocols = imap`, inherited from the pre-26.05
+          # module's enableImap default, which stood up a real IMAP
+          # listener with `ssl = no` and plaintext auth permitted. Nothing
+          # published it outside the container, but nothing needed it
+          # either. `ssl`/`disable_plaintext_auth` stay as they are: left
+          # unsaid, Dovecot 2.3 defaults ssl to yes with no cert to serve.
+          protocols = [ ];
           ssl = "no";
           disable_plaintext_auth = false;
 
@@ -337,8 +344,8 @@ in {
           "reject_non_fqdn_sender" # Require fully-qualified sender addresses
           "permit_sasl_authenticated" # Allow authenticated users
           "permit_mynetworks" # Allow trusted networks
-        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit" ];
+          "permit"
+        ];
 
         # RELAY RESTRICTIONS: Control who can relay mail through server
         # Prevents open relay abuse (critical for preventing spam listing)
@@ -365,14 +372,31 @@ in {
           "reject_non_fqdn_recipient"
         ] ++ (optional cfg.policy-spf.enable
           "check_policy_service unix:private/policy-spf") # SPF validation
-          ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-            cfg.blacklist.dns) # DNS blacklists
           ++ [ "permit_mynetworks" "reject_unauth_destination" "permit" ];
 
-        # CLIENT RESTRICTIONS: Applied to connecting clients
-        # Very strict: only auth users and trusted networks allowed
+        # CLIENT RESTRICTIONS (submission listeners): only authenticated
+        # users and trusted networks may connect at all.
         client-restrictions =
           [ "permit_sasl_authenticated" "permit_mynetworks" "reject" ];
+
+        # CLIENT RESTRICTIONS (port 25): the single place DNS blacklists
+        # are consulted.
+        #
+        # reject_rbl_client tests the CLIENT ADDRESS, so its verdict is the
+        # same whichever restriction class evaluates it -- and this list
+        # used to be spliced into the sender, recipient AND helo lists,
+        # asking the same question of the same RBLs three times per
+        # message. Postfix caches within a transaction, but each list is
+        # still walked and the intent was triplicated in the config.
+        #
+        # The permits come first so authenticated users and trusted
+        # networks skip the lookups entirely, which is the order the three
+        # old lists already produced.
+        incoming-client-restrictions = [
+          "permit_mynetworks"
+          "permit_sasl_authenticated"
+        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
+          cfg.blacklist.dns) ++ [ "permit" ];
 
         # HELO RESTRICTIONS: Applied to HELO/EHLO for incoming mail
         # Helps catch spambots with invalid HELO strings
@@ -382,8 +406,8 @@ in {
           "reject_invalid_hostname"
           "reject_non_fqdn_helo_hostname"
           # "reject_unknown_helo_hostname"  # Disabled: causes legitimate mail rejection
-        ] ++ (map (blacklist: "reject_rbl_client ${blacklist}")
-          cfg.blacklist.dns) ++ [ "permit" ];
+          "permit"
+        ];
 
         # HELO RESTRICTIONS: Applied to HELO/EHLO for outgoing mail (submission)
         # More permissive since users are authenticated
@@ -425,18 +449,46 @@ in {
           smtpd_client_connection_rate_limit = "60";
         };
 
+        # Shared by both submission listeners. Values must be strings: the
+        # module types submission{,s}Options as attrsOf str, which is why
+        # the restriction lists go through makeRestrictionsString (master.cf
+        # `-o` takes one argument, so no spaces).
+        submission-options = {
+          milter_macro_daemon_name = "ORIGINATING";
+          smtpd_helo_required = "yes";
+          smtpd_tls_security_level = "encrypt";
+          smtpd_sasl_auth_enable = "yes";
+          smtpd_sasl_type = "dovecot";
+          smtpd_sasl_path = "/run/dovecot2/auth";
+          smtpd_sasl_security_options = "noanonymous";
+          smtpd_sasl_local_domain = cfg.sasl-domain;
+          smtpd_helo_restrictions =
+            makeRestrictionsString outgoing-helo-restrictions;
+          smtpd_client_restrictions =
+            makeRestrictionsString client-restrictions;
+          smtpd_sender_restrictions =
+            makeRestrictionsString sender-restrictions;
+          smtpd_recipient_restrictions =
+            makeRestrictionsString recipient-restrictions;
+          cleanup_service_name = "submission-header-cleanup";
+        } // rate-limits;
+
       in {
         enable = true;
 
         user = cfg.user;
         group = cfg.group;
 
-        domain = cfg.domain;
-        origin = cfg.domain;
-        hostname = cfg.hostname;
-        destination = [ "localhost" "localhost.localdomain" ];
-
-        enableHeaderChecks = true;
+        # domain/origin/hostname/destination used to be set here as
+        # top-level options. nixpkgs 26.05 renamed all four into
+        # settings.main (mydomain/myorigin/myhostname/mydestination), where
+        # they are set below -- the old spellings still work through
+        # mkRenamedOptionModule but warn on every evaluation.
+        #
+        # `enableHeaderChecks = true` was here too. With no headerChecks
+        # defined it only pointed header_checks at an empty regexp map; the
+        # submission cleanup service has its own header_checks and does not
+        # depend on it.
         enableSmtp = true;
         enableSubmission = true;
         # Port 465 (implicit TLS). Defaults to FALSE in nixpkgs, so without
@@ -462,6 +514,15 @@ in {
             (mkRejectList cfg.blacklist.recipients);
           virtual_mailbox_map = writeEntries "virtual_mailbox_map"
             (map (domain: "@${domain}  OK") allDomains);
+          # NOTE: this one is consumed as `pcre:`, not `hash:`, so the
+          # postmap the module runs over every mapFiles entry builds a .db
+          # beside it that nothing ever reads. Left in mapFiles anyway:
+          # that is what puts the file at
+          # /var/lib/postfix/conf/sender_login_map, which is the path
+          # smtpd_sender_login_maps resolves, and moving it to a bare store
+          # path to dodge one unused .db risks breaking the anti-spoofing
+          # check if smtpd turns out to be chrooted (master.cf leaves
+          # chroot at Postfix's compiled-in default here).
           sender_login_map = let
             defaultMaps =
               map (domain: "/^(.*)@${escapeDot domain}$/  \${1}") allDomains;
@@ -478,8 +539,6 @@ in {
           (userAliasMaps ++ aliasUserMaps ++ defaultMaps);
         };
 
-        networks = cfg.trusted-networks;
-
         virtual = let
           mkEmail = domain: user: "${user}@${domain}";
           mkUserAliases = concatMapAttrsToList (user: aliases:
@@ -495,7 +554,19 @@ in {
         in concatStringsSep "\n" ((mkUserAliases cfg.aliases.user-aliases)
           ++ (mkAliasUsers allDomains cfg.aliases.alias-users));
 
-        config = {
+        settings.main = {
+          mydomain = cfg.domain;
+          myorigin = cfg.domain;
+          myhostname = cfg.hostname;
+          mydestination = [ "localhost" "localhost.localdomain" ];
+          mynetworks = cfg.trusted-networks;
+
+          # DNS blacklists, consulted once -- see incoming-client-restrictions.
+          # The submission listeners override smtpd_client_restrictions with
+          # their own stricter list, so authenticated users never reach the
+          # RBL lookups.
+          smtpd_client_restrictions = incoming-client-restrictions;
+
           # TLS certificate and key configuration
           # Combined cert+key file for both server (smtpd) and client (smtp) operations
           smtpd_tls_chain_files = [ cfg.ssl.private-key cfg.ssl.certificate ];
@@ -608,18 +679,18 @@ in {
           smtp_tls_security_level = "may";
           smtp_tls_loglevel = "1";
 
-          # TLS Protocol Configuration
-          # Disable obsolete/insecure protocols: SSLv2, SSLv3, TLSv1.0
-          # TLS Protocol Configuration: TLSv1.2+ only (RFC 8996, 2021)
-          # TLSv1.1 and earlier are deprecated and disabled for security
-          smtpd_tls_protocols =
-            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
-          smtp_tls_protocols =
-            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
-          smtpd_tls_mandatory_protocols =
-            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
-          smtp_tls_mandatory_protocols =
-            [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ];
+          # TLS protocols: TLSv1.2+ only (RFC 8996, 2021).
+          #
+          # These were four copies of
+          # [ "TLSv1.3" "TLSv1.2" "!TLSv1.1" "!TLSv1" "!SSLv2" "!SSLv3" ],
+          # mixing the inclusive and exclusive forms. That resolves to the
+          # same thing -- Postfix starts from the positive entries, then
+          # the exclusions no-op -- but ">=TLSv1.2" (Postfix 3.6+) states
+          # it once and stays correct as new versions appear.
+          smtpd_tls_protocols = ">=TLSv1.2";
+          smtp_tls_protocols = ">=TLSv1.2";
+          smtpd_tls_mandatory_protocols = ">=TLSv1.2";
+          smtp_tls_mandatory_protocols = ">=TLSv1.2";
 
           # Cipher Configuration: Use only "high" security ciphers
           # Excludes weak/broken algorithms and ensures forward secrecy
@@ -658,47 +729,14 @@ in {
           tls_random_source = "dev:/dev/urandom";
         };
 
-        submissionOptions = {
-          milter_macro_daemon_name = "ORIGINATING";
-          smtpd_helo_required = "yes";
-          smtpd_tls_security_level = "encrypt";
-          smtpd_sasl_auth_enable = "yes";
-          smtpd_sasl_type = "dovecot";
-          smtpd_sasl_path = "/run/dovecot2/auth";
-          smtpd_sasl_security_options = "noanonymous";
-          smtpd_sasl_local_domain = cfg.sasl-domain;
-          smtpd_helo_restrictions =
-            makeRestrictionsString outgoing-helo-restrictions;
-          smtpd_client_restrictions =
-            makeRestrictionsString client-restrictions;
-          smtpd_sender_restrictions =
-            makeRestrictionsString sender-restrictions;
-          smtpd_recipient_restrictions =
-            makeRestrictionsString recipient-restrictions;
-          cleanup_service_name = "submission-header-cleanup";
-        } // rate-limits;
+        # 587 (STARTTLS) and 465 (implicit TLS) take an identical set of
+        # overrides -- these were two byte-identical blocks. The module
+        # adds smtpd_tls_wrappermode to the 465 service itself, which is
+        # the only thing that actually differs between the two.
+        submissionOptions = submission-options;
+        submissionsOptions = submission-options;
 
-        submissionsOptions = {
-          milter_macro_daemon_name = "ORIGINATING";
-          smtpd_helo_required = "yes";
-          smtpd_tls_security_level = "encrypt";
-          smtpd_sasl_auth_enable = "yes";
-          smtpd_sasl_type = "dovecot";
-          smtpd_sasl_path = "/run/dovecot2/auth";
-          smtpd_sasl_security_options = "noanonymous";
-          smtpd_sasl_local_domain = cfg.sasl-domain;
-          smtpd_helo_restrictions =
-            makeRestrictionsString outgoing-helo-restrictions;
-          smtpd_client_restrictions =
-            makeRestrictionsString client-restrictions;
-          smtpd_sender_restrictions =
-            makeRestrictionsString sender-restrictions;
-          smtpd_recipient_restrictions =
-            makeRestrictionsString recipient-restrictions;
-          cleanup_service_name = "submission-header-cleanup";
-        } // rate-limits;
-
-        masterConfig = {
+        settings.master = {
           # See: http://www.postfix.org/smtp.8.html
           lmtp.args = [ "flags=DO" ];
           policy-spf = let

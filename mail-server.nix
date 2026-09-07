@@ -647,7 +647,11 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                imports = [ ./dovecot.nix ./postfix.nix ];
+                # postfix.nix only -- it configures services.dovecot2
+                # directly for SASL and never touches fudo.mail.dovecot, so
+                # importing dovecot.nix here added an options tree nothing
+                # in this container sets.
+                imports = [ ./postfix.nix ];
 
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -862,7 +866,10 @@ in {
                   enable = true;
                   debug = cfg.debug;
                   port = dkimPort;
-                  state-directory = "/state";
+                  # No state-directory: the option is gone, because nothing
+                  # ever read it. Keys live at /var/lib/opendkim, which is
+                  # what the volume above mounts -- "/state" here was
+                  # inert and contradicted that mount.
                   domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
                 };
               };

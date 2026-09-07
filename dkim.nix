@@ -13,7 +13,9 @@
 # - Integration with Postfix via milter protocol
 #
 # Architecture choice: Uses OpenDKIM for mature, well-tested DKIM implementation.
-# Keys are stored in state-directory and should be backed up securely.
+# Keys live under /var/lib/opendkim (the nixpkgs module's own location,
+# bind-mounted from the host by mail-server.nix) and should be backed up
+# securely.
 #
 # Note: After key generation, you must publish the public key as a TXT record
 # in DNS at: <selector>._domainkey.<domain>
@@ -45,10 +47,11 @@ in {
       default = 5324;
     };
 
-    state-directory = mkOption {
-      type = str;
-      description = "Directory at which to store DKIM state (i.e. keys).";
-    };
+    # There was a `state-directory` option here. Nothing read it: OpenDKIM's
+    # key location comes from the nixpkgs module (keyPath, under
+    # /var/lib/opendkim), and mail-server.nix bind-mounts the host's
+    # dkim directory onto that path. The option only ever looked like it
+    # controlled where keys live.
   };
 
   config = mkIf cfg.enable {

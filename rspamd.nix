@@ -181,9 +181,19 @@ in {
           });
 
         locals = {
-          # Add detailed spam headers to help with debugging and filtering
-          # Headers include scores, symbols matched, and individual test results
-          "milter_headers.conf".text = "extended_spam_headers = yes;";
+          # Add detailed spam headers to help with debugging and filtering.
+          # Headers include scores, symbols matched, and individual results.
+          #
+          # skip_authenticated/skip_local keep them off mail this server
+          # SENDS: submission runs through the same milter, so without
+          # these every outgoing message carried X-Spamd-Result with the
+          # internal symbol names and scores -- and the DKIM milter, which
+          # runs after rspamd, then signed them.
+          "milter_headers.conf".text = ''
+            extended_spam_headers = true;
+            skip_authenticated = true;
+            skip_local = true;
+          '';
 
           # Redis for Bayes statistics, neural network, and reputation data.
           # Redis provides fast, persistent storage for learning and scoring.
@@ -252,13 +262,18 @@ in {
             # Enable DMARC checking
             enabled = true;
 
-            # Report to domain owners (aggregate reports)
-            reporting = {
-              enabled = true;
-              email = "postmaster@localhost";
-              # org_name = "Your Organization";
-              # domain = "example.com";
-            };
+            # Aggregate reporting to domain owners: OFF, honestly.
+            #
+            # This was `enabled = true` with email = postmaster@localhost
+            # and no org_name -- which sent nothing regardless, because
+            # rspamd only emits aggregate reports when the
+            # rspamd_dmarc_report tool is run on a schedule, and there is
+            # no such timer here. Turning it on for real means a real
+            # org_name/domain/email plus a systemd timer running
+            # `rspamd_dmarc_report`; until then, saying false is accurate.
+            reporting {
+              enabled = false;
+            }
 
             # Actions based on DMARC policy
             # These override the domain's policy for testing
@@ -303,21 +318,12 @@ in {
             }
           '';
 
-          "metrics_exporter.conf".text = ''
-            backend = "graphite";
-            metrics = [
-              "actions.add header",
-              "actions.greylist",
-              "actions.reject",
-              "actions.rewrite subject",
-              "actions.soft reject",
-              "connections",
-              "ham_count",
-              "spam_count",
-              "learned",
-              "scanned",
-            ];
-          '';
+          # A "metrics_exporter.conf" pointing rspamd's graphite backend at
+          # a graphite server that does not exist used to sit here. Dead
+          # since metrics moved to the controller's native /metrics
+          # endpoint (see the comment above `rspamd =`); all it did was
+          # make rspamd periodically try to export somewhere.
+
 
           # SURBL/URIBL: DNS-based blacklists for URLs in email
           # Checks all URLs (including those in email addresses and DKIM signatures)
@@ -429,7 +435,9 @@ in {
           '';
         };
 
-        overrides."milter_headers.conf".text = "extended_spam_headers = true;";
+        # `overrides."milter_headers.conf"` used to sit here restating
+        # extended_spam_headers with the other boolean spelling. It won,
+        # being an override, so the local above was dead. Said once now.
 
         # Worker processes for handling different types of requests
         workers = {
@@ -452,10 +460,14 @@ in {
           };
 
           # Controller worker: Provides web UI and API for management
-          # Used for training, statistics viewing, and configuration
+          # Used for training, statistics viewing, and configuration.
+          # One process: this is the endpoint that WRITES -- learn requests
+          # from the Sieve pipes, statistics, the /metrics scrape -- and
+          # fanning that across four workers buys nothing while making
+          # concurrent Bayes updates race each other.
           controller = {
             type = "controller";
-            count = 4;
+            count = 1;
             bindSockets = [ "*:${toString cfg.ports.controller}" ];
             includes = [ ];
           };
