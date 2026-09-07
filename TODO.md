@@ -651,6 +651,48 @@ systemd.timers.mail-health-check = {
 
 ---
 
+## Migrations
+
+### 25. Dovecot 2.4 Migration
+
+**Priority**: HIGH (deferred, not optional)
+
+**Status**: Deferred. `dovecot.nix` pins `pkgs.dovecot_2_3` so it keeps running
+on nixpkgs 26.05, which defaults to Dovecot 2.4.
+
+**Background**: 26.05 ships Dovecot 2.4.5 and rewrote the NixOS module around a
+freeform `services.dovecot2.settings`. The module migration is done (see the
+26.05 fixes in dovecot.nix); what is NOT done is the move to 2.4 itself, which
+is a genuine breaking change:
+
+- **Config language**: `%u`/`%n` become `%{user}`/`%{user|username}`;
+  `mail_location` splits into `mail_driver` + `mail_path`; `passdb`/`userdb`
+  become named sections (`passdb ldap { ... }`); quota settings were rewritten.
+- **old_stats is gone.** Everything under `service old-stats`, the
+  `old_stats_*` plugin settings, the `old_stats` mail plugin and the
+  `services.prometheus.exporters.dovecot` socket it feeds all depend on it.
+  Metrics have to be rebuilt on 2.4's own stats/metrics support.
+- **fts-flatcurve does not exist for 2.4** -- full-text search moved into
+  Dovecot proper. nixpkgs builds `dovecot-fts-flatcurve` against `dovecot_2_3`
+  only. The `fts`/`fts_flatcurve` mail plugins and the whole `plugin { fts... }`
+  block need replacing with 2.4's built-in FTS.
+- **Pigeonhole**: `pkgs.dovecot_pigeonhole` is the 2.4 build; the pin uses
+  `dovecot_pigeonhole_0_5`. Sieve settings changed shape in 2.4 as well.
+
+**Why it can't wait forever**: `dovecot_2_3` is the outgoing branch (2.3.21.1,
+upstream has moved on) and will not stay in nixpkgs indefinitely. This should
+be scheduled into a maintenance window with a test deployment, not done under
+pressure when the package disappears.
+
+**Approach**: migrate on a test host first, with a real mailbox and a real
+client. Suggested order: config-language translation -> FTS -> metrics ->
+Sieve, verifying IMAP login, LMTP delivery, spam/ham learning and search at
+each step.
+
+**Estimated Effort**: 1-3 days, plus a deployment window.
+
+---
+
 ## Priority Summary
 
 ### Immediate (Next Sprint)

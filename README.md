@@ -471,7 +471,10 @@ systemctl status postfix dovecot2 rspamd clamav-daemon opendkim
 ## Version Information
 
 - **Postfix**: System default (via NixOS)
-- **Dovecot**: System default (via NixOS)
+- **Dovecot**: pinned to 2.3 (`pkgs.dovecot_2_3`), NOT the system default --
+  nixpkgs 26.05 defaults to 2.4, which is a breaking change for this
+  configuration. See TODO.md item 25 for the migration; the pin also forces
+  `dovecot_pigeonhole_0_5` and is why `dovecot-fts-flatcurve` still works.
 - **Rspamd**: System default (via NixOS)
 - **ClamAV**: System default (via NixOS)
 - **OpenDKIM**: System default (via NixOS)
