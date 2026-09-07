@@ -397,6 +397,34 @@ in {
         makeRestrictionsString = lst:
           concatStringsSep "," (map (replaceStrings [ " " ] [ "," ]) lst);
 
+        # RATE LIMITS: submission listeners only, never main.cf.
+        #
+        # Every one of these is a per-CLIENT-IP limit, not a per-user one
+        # (anvil counts by client address; it has no notion of the SASL
+        # login). In main.cf they therefore applied to smtpd on port 25 as
+        # well, where the effect is backwards: instead of containing a
+        # compromised local account, they throttle legitimate inbound mail
+        # from any busy peer -- a large provider's outbound pool, a
+        # mailing list -- to 100 messages and 60 connections an hour.
+        #
+        # Postfix's default for all three is 0 (unlimited), which is what
+        # port 25 wants. The anvil WINDOW stays in main.cf below, because
+        # anvil rather than smtpd reads it and a per-service `-o` override
+        # would be silently ignored.
+        rate-limits = optionalAttrs cfg.rate-limit.enable {
+          # Messages per anvil window (1h) from one client address.
+          smtpd_client_message_rate_limit =
+            toString cfg.rate-limit.message-rate-limit;
+
+          # Recipients per anvil window (1h) from one client address.
+          smtpd_client_recipient_rate_limit =
+            toString cfg.rate-limit.recipient-rate-limit;
+
+          # Connections per anvil window from one client address -- an
+          # hour, not a minute as this was previously commented.
+          smtpd_client_connection_rate_limit = "60";
+        };
+
       in {
         enable = true;
 
@@ -487,22 +515,12 @@ in {
 
           message_size_limit = cfg.message-size-limit * 1024 * 1024;
 
-          # Rate Limiting: Prevent abuse from compromised accounts
-          # Limits messages and recipients per user per hour
+          # Rate limiting: only the anvil WINDOW is global. The thresholds
+          # themselves are per-client-IP and belong on the submission
+          # listeners -- see `rate-limits` in the let block above.
         } // (optionalAttrs cfg.rate-limit.enable {
           # Anvil service tracks connection/rate statistics
           anvil_rate_time_unit = "3600s"; # 1 hour window
-
-          # Message rate: max messages per hour per SASL user
-          smtpd_client_message_rate_limit =
-            toString cfg.rate-limit.message-rate-limit;
-
-          # Recipient rate: max recipients per hour per SASL user
-          smtpd_client_recipient_rate_limit =
-            toString cfg.rate-limit.recipient-rate-limit;
-
-          # Connection rate: max connections per minute from same IP
-          smtpd_client_connection_rate_limit = "60";
         }) // {
 
           # Not used?
@@ -658,7 +676,7 @@ in {
           smtpd_recipient_restrictions =
             makeRestrictionsString recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
-        };
+        } // rate-limits;
 
         submissionsOptions = {
           milter_macro_daemon_name = "ORIGINATING";
@@ -678,7 +696,7 @@ in {
           smtpd_recipient_restrictions =
             makeRestrictionsString recipient-restrictions;
           cleanup_service_name = "submission-header-cleanup";
-        };
+        } // rate-limits;
 
         masterConfig = {
           # See: http://www.postfix.org/smtp.8.html
@@ -700,8 +718,14 @@ in {
               "${policydSpfConfig}"
             ];
           };
-          smtp = { args = [ "-v" ]; };
-          submission = { args = [ "-v" ]; };
+          # Protocol-level tracing, gated on cfg.debug. Unconditionally
+          # verbose means a full per-connection trace of every outbound
+          # delivery and every client submission, in production, forever.
+          # `args` is a list option, so these concatenate with the -o
+          # flags the module generates rather than replacing them; an
+          # empty list adds nothing.
+          smtp.args = optional cfg.debug "-v";
+          submission.args = optional cfg.debug "-v";
           submission-header-cleanup = let
             submissionHeaderCleanupRules =
               pkgs.writeText "submission_header_cleanup_rules" ''

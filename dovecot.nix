@@ -402,9 +402,19 @@ in {
           ''}
         '';
 
-        # Userdb override for quota exemptions
-        userdbOverride = pkgs.writeText "dovecot-userdb-override" (concatStringsSep
-          "\n" (map (user: "${user}::::::quota_rule=*:storage=0") cfg.quota.exemptions));
+        # Userdb override for quota exemptions: one bare entry per exempt
+        # user, no fields. These lines only have to MATCH -- the userdb
+        # block below carries `override_fields = quota_rule=*:storage=0`,
+        # which is what actually applies the exemption (and, being an
+        # override, wins over anything written here anyway).
+        #
+        # They previously carried the rule inline as
+        # `${user}::::::quota_rule=*:storage=0`, which was a field short:
+        # passwd-file is user:password:uid:gid:gecos:home:shell:extra_fields,
+        # so with six colons `quota_rule=*` landed in the SHELL field and
+        # only `storage=0` reached extra_fields.
+        userdbOverride = pkgs.writeText "dovecot-userdb-override"
+          (concatStringsSep "\n" (map (user: "${user}::::::") cfg.quota.exemptions));
 
         mailUserUid = config.users.users."${cfg.mail-user}".uid;
 
@@ -452,8 +462,11 @@ in {
             fts = flatcurve
             fts_autoindex = yes
             fts_enforced = yes
+            # Numbered, not repeated: Dovecot does not accumulate repeated
+            # keys, so a second plain `fts_autoindex_exclude` overwrote the
+            # first and Trash was being indexed after all.
             fts_autoindex_exclude = \Trash
-            fts_autoindex_exclude = \Junk
+            fts_autoindex_exclude2 = \Junk
             fts_decoder = decode2text
 
             # Flatcurve requires language configuration for stemming
