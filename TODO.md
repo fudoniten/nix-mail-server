@@ -448,7 +448,7 @@ DNS requirements are scattered or implied, not centrally documented.
 
 **Priority**: COMPLETED
 
-**Status**: Hyperscan/vectorscan is disabled at build time.
+**Status**: Hyperscan/vectorscan is a per-deployment build option, on by default.
 
 **Background**: Vectorscan (the hyperscan fork) requires SSE4.2 + POPCNT as its
 minimum x86_64 instruction set -- even the FAT_RUNTIME SSSE3 "baseline" tier uses
@@ -460,14 +460,23 @@ but this still crashed with "Illegal instruction" because the base code tier
 unconditionally uses SSE4.2 instructions (POPCNT, etc.).
 
 **Solution Applied**:
-Rspamd is built with `withVectorscan = false` and `-DENABLE_HYPERSCAN=OFF` in
-rspamd.nix. This was previously blocked by a linker error in rspamd 3.7.x
-(upstream issue #4701), but the fix (commit d907a95) is included in rspamd 3.13.0.
-Rspamd falls back to PCRE-based regex matching, which is slower but functional.
+`fudo.mail.antispam.hyperscan` (default true) selects the rspamd build. Set it
+false on pre-SSE4.2 hardware and rspamd.nix rebuilds rspamd with
+`-DENABLE_HYPERSCAN=OFF` and vectorscan dropped from its buildInputs, falling
+back to PCRE-based regex matching -- slower, but functional. Hosts with modern
+CPUs get stock `pkgs.rspamd` and pay nothing for this.
+
+Two historical wrinkles, both now resolved upstream: a linker error in rspamd
+3.7.x (issue #4701, fixed by d907a95 in 3.13.0) and a missing
+`rspamd_re_cache_compile_hyperscan_scoped_single` stub in 3.13 (issue #5620,
+fixed by 98e731bf). rspamd 4.0.x carries both, so the fetchpatch this module
+used to apply has been dropped. The override is done with `overrideAttrs`
+rather than `.override { withVectorscan = false; }` because nixpkgs 26.05
+removed rspamd's withVectorscan/withHyperscan arguments.
 
 **Future Optimization**: After upgrading to hardware with SSE4.2+ support,
-remove the rspamd `package` override in rspamd.nix to re-enable vectorscan
-for faster regex matching.
+drop the `fudo.mail.antispam.hyperscan = false` setting from that host's config
+to re-enable vectorscan for faster regex matching.
 
 ---
 
@@ -662,7 +671,7 @@ systemd.timers.mail-health-check = {
 11. ✅ **Greylisting** - Additional spam protection
 
 ### Long Term (When Needed)
-12. ✅ **Hyperscan** - Disabled (requires SSE4.2+, see item 15)
+12. ✅ **Hyperscan** - Optional build flag, off on pre-SSE4.2 hosts (see item 15)
 13. ✅ **Vacation/Autoresponder** - User feature
 14. ✅ **Archive** - If compliance needed
 15. ✅ **Webmail** - User convenience

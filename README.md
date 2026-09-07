@@ -392,7 +392,7 @@ swaks --to user@example.com \
 
 ### High CPU Usage
 
-**Vectorscan/Hyperscan**: Vectorscan is disabled in this deployment because it requires SSE4.2+ (the current server CPU, Xeon L5420, only has SSSE3). Rspamd uses PCRE-based regex matching instead. After upgrading to hardware with SSE4.2+, remove the `package` override in rspamd.nix to re-enable vectorscan for better performance.
+**Vectorscan/Hyperscan**: rspamd is built with hyperscan by default. Vectorscan needs SSE4.2 + POPCNT, so on a pre-Nehalem CPU (e.g. a Xeon L5420, which only reaches SSSE3) rspamd dies with "Illegal instruction" -- set `fudo.mail.antispam.hyperscan = false;` there and rspamd falls back to PCRE-based regex matching, which is slower. Drop that setting again after moving to hardware with SSE4.2+.
 
 ### Mail Storage Full
 
@@ -425,12 +425,12 @@ Consider increasing:
 
 ### Current Limitations
 
-- **Legacy CPU support**: Vectorscan disabled (requires SSE4.2+, Xeon L5420 has SSSE3 only)
+- **Legacy CPU support**: vectorscan needs SSE4.2+; on older CPUs (Xeon L5420 has SSSE3 only) set `fudo.mail.antispam.hyperscan = false`
 - **UID/GID**: Fixed at 5025 for mail user/group
 
 ### Recommended Specs
 
-- **CPU**: Any x64 processor (SSE4.2+ recommended to enable vectorscan for faster spam filtering)
+- **CPU**: Any x64 processor (SSE4.2+ recommended, so vectorscan can be left enabled for faster spam filtering)
 - **RAM**: 2GB minimum, 4GB+ recommended
 - **Disk**: SSD strongly recommended for mail storage and indexes
 - **Network**: Static IP with reverse DNS

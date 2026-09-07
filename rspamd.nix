@@ -14,7 +14,8 @@
 #
 # Architecture choices:
 # - Redis backend for statistics and fuzzy hashes (fast, scalable)
-# - Vectorscan/Hyperscan disabled (requires SSE4.2+, not available on Xeon L5420)
+# - Vectorscan/Hyperscan optional (see the `hyperscan` option: it needs SSE4.2+,
+#   which pre-Nehalem CPUs such as the Xeon L5420 don't have)
 # - Auto-learning via Sieve scripts (ham.sieve/spam.sieve in Dovecot)
 # - Milter integration with Postfix for real-time filtering
 # - ClamAV rejects infected mail immediately (no quarantine)
@@ -85,6 +86,20 @@ in {
         '';
       };
     };
+
+    hyperscan = mkOption {
+      type = bool;
+      default = true;
+      description = ''
+        Build rspamd with hyperscan (vectorscan) regex acceleration.
+
+        Vectorscan's x86_64 baseline needs SSE4.2 + POPCNT -- even the
+        FAT_RUNTIME "generic" tier -- so on pre-Nehalem CPUs an rspamd
+        built with it dies with SIGILL the first time it compiles a regex
+        cache. Set this false there; rspamd falls back to PCRE matching,
+        which is slower but runs anywhere.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -138,34 +153,31 @@ in {
       rspamd = {
         enable = true;
 
-        # Disable vectorscan (hyperscan fork) to avoid "Illegal instruction"
-        # crashes on CPUs without SSE4.2 (e.g. Xeon L5420, which only has SSSE3).
-        # Vectorscan's minimum x86_64 requirement is SSE4.2 + POPCNT, regardless
-        # of FAT_RUNTIME or AVX2/AVX512 build flags -- the base code tier always
-        # uses SSE4.2 instructions.  Rspamd falls back to PCRE regex matching.
+        # Vectorscan (the hyperscan fork nixpkgs builds rspamd against) needs
+        # SSE4.2 + POPCNT as its x86_64 baseline -- even the FAT_RUNTIME
+        # "generic" tier -- so on a pre-Nehalem CPU rspamd dies with
+        # "Illegal instruction". `hyperscan = false` rebuilds it without,
+        # falling back to PCRE regex matching: slower, but it runs.
         #
-        # Two overrides are needed:
-        # 1. withVectorscan=false removes vectorscan from buildInputs
-        # 2. cmakeFlags override changes -DENABLE_HYPERSCAN=ON to OFF
-        #    (nixpkgs hardcodes it to ON)
-        # 3. Upstream patch 98e731bf adds a missing stub for
-        #    rspamd_re_cache_compile_hyperscan_scoped_single when building
-        #    without hyperscan (fixes linker error, upstream issue #5620)
-        package = (pkgs.rspamd.override { withVectorscan = false; }).overrideAttrs
-          (old: {
-            patches = (old.patches or [ ]) ++ [
-              (pkgs.fetchpatch2 {
-                url = "https://github.com/rspamd/rspamd/commit/98e731bf69306a830834fbcfa7a21c3357130693.patch";
-                hash = "sha256-IteHMgv9j4Xf/Auc9hw7usIy2v7Y8xLP1OFVkSuxwjw=";
-              })
-            ];
-            cmakeFlags = map
-              (f:
-                if f == "-DENABLE_HYPERSCAN=ON" then
-                  "-DENABLE_HYPERSCAN=OFF"
-                else
-                  f)
-              old.cmakeFlags;
+        # Done with overrideAttrs rather than an override argument because
+        # nixpkgs 26.05 dropped rspamd's withVectorscan/withHyperscan flags
+        # (it now hardcodes -DENABLE_HYPERSCAN=ON and an unconditional
+        # vectorscan buildInput), so there is nothing left to `.override`.
+        # ENABLE_HYPERSCAN is still an upstream cmake option, and defaults
+        # to OFF there, so this is a configuration rspamd supports: every
+        # WITH_HYPERSCAN-guarded entry point has a non-hyperscan stub as of
+        # 4.0.x, including the one that was missing in 3.13 (upstream issue
+        # #5620, fixed in 98e731bf -- the patch this used to carry, now
+        # upstream and dropped).
+        package = if cfg.hyperscan then
+          pkgs.rspamd
+        else
+          pkgs.rspamd.overrideAttrs (old: {
+            buildInputs =
+              filter (dep: (dep.pname or "") != "vectorscan") old.buildInputs;
+            cmakeFlags =
+              (filter (f: !(hasPrefix "-DENABLE_HYPERSCAN=" f)) old.cmakeFlags)
+              ++ [ "-DENABLE_HYPERSCAN=OFF" ];
           });
 
         locals = {
