@@ -37,6 +37,21 @@ let
 
   sieveDirectory = "${cfg.state-directory}/sieves";
 
+  # `pkgs.dovecot` is 2.4 as of nixpkgs 26.05 and this module still speaks 2.3
+  # (see the `package` comment further down), so the server, its Sieve plugin
+  # and decode2text all have to come from the 2.3 side of nixpkgs. Note that
+  # `pkgs.dovecot_pigeonhole` is the 2.4 build -- 0.5 is the 2.3 one -- while
+  # dovecot-fts-flatcurve is already built against dovecot_2_3 upstream, the
+  # plugin having moved into Dovecot proper in 2.4.
+  dovecotPkg = pkgs.dovecot_2_3;
+  pigeonholePkg = pkgs.dovecot_pigeonhole_0_5;
+
+  # `services.dovecot2.user` and `.group` were dropped in the 26.05 module
+  # rewrite with no rename left behind (hence the bare "attribute 'user'
+  # missing" if you go looking for them). These are the replacements.
+  dovecotUser = config.services.dovecot2.settings.default_internal_user;
+  dovecotGroup = config.services.dovecot2.settings.default_internal_group;
+
 in {
   options.fudo.mail.dovecot = with types; {
     enable = mkEnableOption "Enable Dovecot2 IMAP server.";
@@ -280,7 +295,7 @@ in {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0711 root root - -"
         "d ${cfg.mail-directory}         0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/sieves 0750 ${config.services.dovecot2.user} ${config.services.dovecot2.group} - -"
+        "d ${cfg.state-directory}/sieves 0750 ${dovecotUser} ${dovecotGroup} - -"
       ];
 
       # Prometheus exporter must start after Dovecot is ready
@@ -295,11 +310,11 @@ in {
     environment = {
       etc."dovecot/conf.d/admin.conf" = {
         source = cfg.admin-conf;
-        user = config.services.dovecot2.user;
+        user = dovecotUser;
         mode = "400";
       };
 
-      systemPackages = with pkgs; [ dovecot_pigeonhole dovecot-fts-flatcurve ];
+      systemPackages = [ pigeonholePkg pkgs.dovecot-fts-flatcurve ];
     };
 
     services = {
@@ -312,149 +327,110 @@ in {
         socketPath = "/var/run/dovecot2/old-stats";
       };
 
-      dovecot2 = {
-        enable = true;
-        enableImap = true;
-        enableLmtp = true;
-        enablePAM = false;
-
-        mailUser = cfg.mail-user;
-        mailGroup = cfg.mail-group;
-        mailLocation = "maildir:${cfg.mail-directory}/%u/";
-        createMailUser = false;
-
-        sslServerCert = cfg.ssl.certificate;
-        sslServerKey = cfg.ssl.private-key;
-
-        mailboxes = cfg.mailboxes;
-        protocols = [ "sieve" ];
-
-        mailPlugins = {
-          globally.enable = [ "old_stats" "fts" "fts_flatcurve" ]
-            ++ (optional cfg.quota.enable "quota");
-          perProtocol = {
-            imap.enable = [ "imap_sieve" "fts" "fts_flatcurve" ]
-              ++ (optional cfg.quota.enable "imap_quota");
-            lmtp.enable = [ "sieve" "fts" "fts_flatcurve" ]
-              ++ (optional cfg.quota.enable "quota");
+      dovecot2 = let
+        # Add learn_ham & learn_spam to dovecot2 path for use by sieves
+        teachRspamd = msg:
+          pkgs.writeShellApplication {
+            name = "rspamd_${msg}";
+            runtimeInputs = with pkgs; [ rspamd ];
+            text = "exec rspamc -h ${cfg.rspamd.host}:${
+                toString cfg.rspamd.port
+              } ${msg}";
           };
-        };
+        learnHam = teachRspamd "learn_ham";
+        learnSpam = teachRspamd "learn_spam";
 
-        imapsieve.mailbox = let
-          reportSpam = builtins.toFile "spam.sieve" ''
-            require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+        reportSpam = builtins.toFile "spam.sieve" ''
+          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
 
-            if environment :matches "imap.user" "*" {
-              set "username" "''${1}";
-            }
-
-            pipe :copy "rspamd_learn_spam" [ "''${username}" ];
-          '';
-          reportHam = builtins.toFile "ham.sieve" ''
-            require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
-
-            if environment :matches "imap.mailbox" "*" {
-              set "mailbox" "''${1}";
-            }
-
-            if string "''${mailbox}" "Trash" {
-              stop;
-            }
-
-            if string "''${mailbox}" "Junk" {
-              stop;
-            }
-
-            if environment :matches "imap.user" "*" {
-              set "username" "''${1}";
-            }
-
-            pipe :copy "rspamd_learn_ham" [ "''${username}" ];
-          '';
-        in [
-          {
-            name = "report-spam";
-            causes = [ "COPY" ];
-            after = reportSpam;
+          if environment :matches "imap.user" "*" {
+            set "username" "''${1}";
           }
-          {
-            name = "report-ham";
-            causes = [ "COPY" ];
-            after = reportHam;
+
+          pipe :copy "rspamd_learn_spam" [ "''${username}" ];
+        '';
+        reportHam = builtins.toFile "ham.sieve" ''
+          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
+
+          if environment :matches "imap.mailbox" "*" {
+            set "mailbox" "''${1}";
           }
-        ];
 
-        sieve = {
-          extensions = [ "fileinto" ];
-          globalExtensions =
-            [ "vnd.dovecot.pipe" "copy" "imapsieve" "environment" "variables" ];
-          scripts = {
-            after = builtins.toFile "spam.sieve" ''
-              require [ "fileinto" ];
+          if string "''${mailbox}" "Trash" {
+            stop;
+          }
 
-              if header :is "X-Spam" "Yes" {
-                fileinto "Junk";
-                stop;
-              }
-            '';
-          };
-        };
+          if string "''${mailbox}" "Junk" {
+            stop;
+          }
 
-        extraConfig = let
-          # Add learn_ham & learn_spam to dovecot2 path for use by sieves
-          pipeBin = let
-            teachRspamd = msg:
-              pkgs.writeShellApplication {
-                name = "rspamd_${msg}";
-                runtimeInputs = with pkgs; [ rspamd ];
-                text = "exec rspamc -h ${cfg.rspamd.host}:${
-                    toString cfg.rspamd.port
-                  } ${msg}";
-              };
-            learnHam = teachRspamd "learn_ham";
-            learnSpam = teachRspamd "learn_spam";
-          in pkgs.buildEnv {
-            name = "rspam_pipe_bin";
-            paths = [ learnHam learnSpam ];
-          };
+          if environment :matches "imap.user" "*" {
+            set "username" "''${1}";
+          }
 
-          # Wrap decode2text.sh with required utilities
-          # The original script needs dirname, grep, and cut which aren't in PATH by default
-          wrappedDecode2Text = pkgs.writeShellScript "decode2text-wrapped.sh" ''
-            export PATH="${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH"
-            exec ${pkgs.dovecot}/libexec/dovecot/decode2text.sh "$@"
-          '';
+          pipe :copy "rspamd_learn_ham" [ "''${username}" ];
+        '';
 
-          # Quota warning script - sends alert to admin when user hits quota
-          quotaWarningScript = pkgs.writeShellScript "quota-warning" ''
-            PERCENT=$1
-            USER=$2
-            ${optionalString (cfg.quota.admin-email != null) ''
-              cat << EOF | ${pkgs.system-sendmail}/bin/sendmail ${cfg.quota.admin-email}
-              From: Mail System <postmaster@$(hostname -f)>
-              To: Admin <${cfg.quota.admin-email}>
-              Subject: Quota warning: $USER at $PERCENT%
+        # Wrap decode2text.sh with required utilities
+        # The original script needs dirname, grep, and cut which aren't in PATH by default
+        wrappedDecode2Text = pkgs.writeShellScript "decode2text-wrapped.sh" ''
+          export PATH="${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH"
+          exec ${dovecotPkg}/libexec/dovecot/decode2text.sh "$@"
+        '';
 
-              User $USER has exceeded $PERCENT% of their mailbox quota.
-              Current mailbox size may be approaching the limit of ${cfg.quota.limit}.
+        # Quota warning script - sends alert to admin when user hits quota
+        quotaWarningScript = pkgs.writeShellScript "quota-warning" ''
+          PERCENT=$1
+          USER=$2
+          ${optionalString (cfg.quota.admin-email != null) ''
+            cat << EOF | ${pkgs.system-sendmail}/bin/sendmail ${cfg.quota.admin-email}
+            From: Mail System <postmaster@$(hostname -f)>
+            To: Admin <${cfg.quota.admin-email}>
+            Subject: Quota warning: $USER at $PERCENT%
 
-              Please investigate and take appropriate action.
-              EOF
-            ''}
-          '';
+            User $USER has exceeded $PERCENT% of their mailbox quota.
+            Current mailbox size may be approaching the limit of ${cfg.quota.limit}.
 
-          # Userdb override for quota exemptions
-          userdbOverride = pkgs.writeText "dovecot-userdb-override" (concatStringsSep
-            "\n" (map (user: "${user}::::::quota_rule=*:storage=0") cfg.quota.exemptions));
+            Please investigate and take appropriate action.
+            EOF
+          ''}
+        '';
 
-          mailUserUid = config.users.users."${cfg.mail-user}".uid;
-          mailUserGid = config.users.groups."${cfg.mail-group}".gid;
-        in ''
+        # Userdb override for quota exemptions
+        userdbOverride = pkgs.writeText "dovecot-userdb-override" (concatStringsSep
+          "\n" (map (user: "${user}::::::quota_rule=*:storage=0") cfg.quota.exemptions));
+
+        mailUserUid = config.users.users."${cfg.mail-user}".uid;
+
+        # `services.dovecot2.mailboxes` was removed in nixpkgs 26.05, so the
+        # namespace it used to generate is assembled here instead. Renders as
+        # `mailbox "Junk" { auto = create ... }` inside `namespace inbox`,
+        # which is what the old option emitted.
+        mailboxSections = mapAttrs' (name: mailbox:
+          nameValuePair ''mailbox "${name}"'' ({ auto = mailbox.auto; }
+            // (optionalAttrs (mailbox.specialUse != null) {
+              special_use = "\\" + mailbox.specialUse;
+            }) // (optionalAttrs (mailbox.autoexpunge != null) {
+              autoexpunge = mailbox.autoexpunge;
+            }))) cfg.mailboxes;
+
+        # What used to be `extraConfig`, also removed in 26.05. It is included
+        # rather than translated into `settings` because it is Dovecot 2.3
+        # config text and stays that way until the 2.4 migration (TODO #17).
+        #
+        # NOTE ON ORDERING: `includeFiles` emits its `!include` line BEFORE
+        # everything in `settings`, where `extraConfig` used to be appended
+        # AFTER. Dovecot's last-assignment-wins means the two halves have
+        # swapped precedence, so anything this file sets that the module also
+        # sets would now silently lose. Everything that overlapped has been
+        # moved onto the module options above -- keep it that way when adding
+        # to this file.
+        extraConf = pkgs.writeText "dovecot-extra.conf" ''
           ## Extra Config
 
           !include /etc/dovecot/conf.d/admin.conf
 
-          ${lib.optionalString cfg.debug ''
+          ${optionalString cfg.debug ''
             mail_debug = yes
             auth_debug = yes
             verbose_ssl = yes
@@ -505,8 +481,6 @@ in {
           # When looking up usernames, just use the name, not the full address
           auth_username_format = %n
 
-          auth_mechanisms = login plain
-
           service lmtp {
             # Enable logging in debug mode
             ${optionalString cfg.debug "executable = lmtp -L"}
@@ -553,15 +527,10 @@ in {
             vsz_limit = 1024M
           }
 
-          namespace inbox {
-            separator = "/"
-            inbox = yes
-          }
-
           service doveadm {
             unix_listener doveadm-server {
-              user = ${config.services.dovecot2.user}
-              group = ${config.services.dovecot2.group}
+              user = ${dovecotUser}
+              group = ${dovecotGroup}
             }
             inet_listener {
               port = ${toString cfg.ports.admin}
@@ -576,27 +545,14 @@ in {
           }
 
           plugin {
-            sieve_plugins = sieve_imapsieve sieve_extprograms
             sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
             # sieve_default = file:${sieveDirectory}/%u/default.sieve
             sieve_default_name = default
-            # From elsewhere to Spam folder
-            imapsieve_mailbox1_name = Junk
-            imapsieve_mailbox1_causes = COPY
-            # imapsieve_mailbox1_before = file:${sieveDirectory}/spam.svbin
-            # From Spam folder to elsewhere
-            imapsieve_mailbox2_name = *
-            imapsieve_mailbox2_from = Junk
-            imapsieve_mailbox2_causes = COPY
-            # imapsieve_mailbox2_before = file:${sieveDirectory}/ham.svbin
-
-            sieve_pipe_bin_dir = ${pipeBin}/bin
-            sieve_global_extensions = +vnd.dovecot.pipe +vnd.dovecot.environment
           }
 
           service decode2text {
             executable = script ${wrappedDecode2Text}
-            user = ${config.services.dovecot2.user}
+            user = ${dovecotUser}
             unix_listener decode2text {
               mode = 0666
             }
@@ -616,13 +572,13 @@ in {
             }
             fifo_listener old-stats-mail {
               mode = 0660
-              user = ${config.services.dovecot2.user}
-              group = ${config.services.dovecot2.group}
+              user = ${dovecotUser}
+              group = ${dovecotGroup}
             }
             fifo_listener old-stats-user {
               mode = 0660
-              user = ${config.services.dovecot2.user}
-              group = ${config.services.dovecot2.group}
+              user = ${dovecotUser}
+              group = ${dovecotGroup}
             }
           }
 
@@ -631,6 +587,107 @@ in {
             old_stats_track_cmds = yes
           }
         '';
+
+      in {
+        enable = true;
+
+        # Pinned to 2.3 deliberately. nixpkgs 26.05 defaults to Dovecot 2.4,
+        # which is not a drop-in: its configuration language changed (%u ->
+        # %{user}, mail_location split into mail_driver/mail_path, named
+        # passdb/userdb sections, rewritten quota settings), old_stats -- the
+        # source of everything under `service old-stats` and the Prometheus
+        # exporter -- is gone, and fts-flatcurve does not exist for it (in 2.4
+        # full-text search moved into Dovecot proper; nixpkgs even builds
+        # dovecot-fts-flatcurve against dovecot_2_3 only). The 26.05 module
+        # supports 2.3 as a first-class option, branching on the package
+        # version throughout. See TODO.md item 25 for the migration.
+        package = dovecotPkg;
+
+        enablePAM = false;
+        createMailUser = false;
+
+        mailPlugins = {
+          globally.enable = [ "old_stats" "fts" "fts_flatcurve" ]
+            ++ (optional cfg.quota.enable "quota");
+          perProtocol = {
+            imap.enable = [ "imap_sieve" "fts" "fts_flatcurve" ]
+              ++ (optional cfg.quota.enable "imap_quota");
+            lmtp.enable = [ "sieve" "fts" "fts_flatcurve" ]
+              ++ (optional cfg.quota.enable "quota");
+          };
+        };
+
+        # These name real mailboxes, not labels: the imapsieve_mailbox<n>_name
+        # settings this generates used to be overridden by hand-written ones in
+        # extraConfig (which won, being appended last), leaving the generated
+        # _after keys pointing at the hand-written mailboxes. Same effective
+        # config, said once.
+        imapsieve.mailbox = [
+          {
+            # Anything copied INTO Junk is spam
+            name = "Junk";
+            causes = [ "COPY" ];
+            after = reportSpam;
+          }
+          {
+            # Anything copied OUT of Junk is ham
+            name = "*";
+            from = "Junk";
+            causes = [ "COPY" ];
+            after = reportHam;
+          }
+        ];
+
+        sieve = {
+          extensions = [ "fileinto" ];
+          # vnd.dovecot.pipe is added by the module itself, because pipeBins
+          # is non-empty.
+          globalExtensions = [ "vnd.dovecot.environment" ];
+          # Replaces the hand-rolled buildEnv + sieve_pipe_bin_dir: the module
+          # builds the same link farm and adds sieve_extprograms for us.
+          pipeBins = map getExe [ learnHam learnSpam ];
+          scripts = {
+            after = builtins.toFile "spam.sieve" ''
+              require [ "fileinto" ];
+
+              if header :is "X-Spam" "Yes" {
+                fileinto "Junk";
+                stop;
+              }
+            '';
+          };
+        };
+
+        # Everything below was a dedicated option before 26.05 rewrote this
+        # module around `settings`: enableImap/enableLmtp/protocols,
+        # sslServerCert/sslServerKey, mailLocation, mailUser/mailGroup,
+        # mailboxes, and `service auth`, which the old module emitted for us.
+        # Dovecot 2.3 spellings throughout, to match the pinned package.
+        settings = {
+          protocols = [ "imap" "lmtp" "sieve" ];
+
+          mail_location = "maildir:${cfg.mail-directory}/%u/";
+          mail_uid = cfg.mail-user;
+          mail_gid = cfg.mail-group;
+
+          ssl_cert = "<${cfg.ssl.certificate}";
+          ssl_key = "<${cfg.ssl.private-key}";
+          disable_plaintext_auth = true;
+
+          # Auth has to start as root to read the LDAP config and the static
+          # userdb's uid; the pre-26.05 module emitted this unconditionally.
+          service = [{
+            _section.name = "auth";
+            user = "root";
+          }];
+
+          "namespace inbox" = {
+            inbox = true;
+            separator = ''"/"'';
+          } // mailboxSections;
+        };
+
+        includeFiles = [ extraConf ];
       };
     };
   };

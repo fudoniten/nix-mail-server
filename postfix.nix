@@ -43,6 +43,14 @@ let
 
   concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
 
+  # This container runs a Dovecot purely as Postfix's SASL auth backend. Same
+  # 2.3 pin and same reason as dovecot.nix -- nixpkgs 26.05 defaults to Dovecot
+  # 2.4, whose configuration language this is not.
+  dovecotPkg = pkgs.dovecot_2_3;
+
+  # `services.dovecot2.user` was dropped in the 26.05 module rewrite.
+  dovecotUser = config.services.dovecot2.settings.default_internal_user;
+
 in {
   options.fudo.mail.postfix = with types; {
     enable = mkEnableOption "Enable Postfix SMTP server.";
@@ -257,36 +265,61 @@ in {
       dovecot2 = {
         enable = true;
         enablePAM = false;
-        extraConfig = let
-          mailUser = config.services.dovecot2.user;
-          mailUserUid = config.users.users."${mailUser}".uid;
-        in ''
-          # Extra Config
-          ${lib.optionalString cfg.debug "auth_debug = yes"}
+        package = dovecotPkg;
 
-          # When looking up usernames, just use the name, not the full address
-          auth_username_format = %n
+        # nixpkgs 26.05 removed `extraConfig`; everything the module used to
+        # derive for us has to be said out loud now. `auth_mechanisms = login
+        # plain` is gone from the text below because the module already
+        # defaults it to the same pair -- and since includeFiles is emitted
+        # BEFORE settings, a line repeated here would lose to the module's
+        # rather than override it, which is the reverse of how extraConfig
+        # behaved. Don't reintroduce anything the module also sets.
+        settings = {
+          # This instance authenticates; it stores nothing. The pre-26.05
+          # module emitted `protocols = imap` (enableImap defaulted true) and,
+          # because no certificate was configured, `ssl = no` with
+          # `disable_plaintext_auth = no`. Left unsaid, Dovecot 2.3 would
+          # instead default to imap+pop3+lmtp with ssl = yes and no cert to
+          # serve.
+          protocols = [ "imap" ];
+          ssl = "no";
+          disable_plaintext_auth = false;
 
-          auth_mechanisms = login plain
+          # Also emitted unconditionally by the old module: auth needs root to
+          # read the LDAP configuration.
+          service = [{
+            _section.name = "auth";
+            user = "root";
+          }];
+        };
 
-          passdb {
-            driver = ldap
-            args = ${cfg.ldap-conf}
-          }
+        includeFiles = [
+          (pkgs.writeText "dovecot-sasl.conf" ''
+            # Extra Config
+            ${optionalString cfg.debug "auth_debug = yes"}
 
-          service auth {
-            unix_listener auth {
-              mode = 0600
-              user = ${config.services.postfix.user}
-              group = ${config.services.postfix.group}
+            # When looking up usernames, just use the name, not the full address
+            auth_username_format = %n
+
+            passdb {
+              driver = ldap
+              args = ${cfg.ldap-conf}
             }
-          }
 
-          service auth-worker {
-            user = ${config.services.dovecot2.user}
-            idle_kill = 3s
-          }
-        '';
+            service auth {
+              unix_listener auth {
+                mode = 0600
+                user = ${config.services.postfix.user}
+                group = ${config.services.postfix.group}
+              }
+            }
+
+            service auth-worker {
+              user = ${dovecotUser}
+              idle_kill = 3s
+            }
+          '')
+        ];
       };
 
       postfix = let
