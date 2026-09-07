@@ -411,6 +411,13 @@ in {
         enableHeaderChecks = true;
         enableSmtp = true;
         enableSubmission = true;
+        # Port 465 (implicit TLS). Defaults to FALSE in nixpkgs, so without
+        # this the `submissions` service never lands in master.cf -- while
+        # mail-server.nix publishes 465 from the container and opens it in
+        # the host firewall, and `submissionsOptions` below is written but
+        # never read. Clients configured for SMTPS got a dead port.
+        # RFC 8314 prefers 465 over 587, so this is the one to have working.
+        enableSubmissions = true;
         # useSrs = true;
 
         # dnsBlacklists = cfg.blacklist.dns;
@@ -568,6 +575,20 @@ in {
           # Port 25: TLS optional (may) - can't require it for incoming internet mail
           # Ports 587/465: TLS required (encrypt) - enforced in submissionOptions
           smtpd_tls_security_level = "may";
+
+          # OUTBOUND (client) TLS. Postfix's built-in default for this is
+          # empty, which falls back to `smtp_use_tls = no` -- so until this
+          # was set, every message this server DELIVERED went out in the
+          # clear, and the whole smtp_tls_* block below governed a session
+          # that was never attempted. The NixOS module doesn't set it
+          # either (the "may" in its docs is an example, not a default).
+          #
+          # "may" is opportunistic: encrypt when the peer offers STARTTLS,
+          # deliver anyway when it doesn't. That is the correct setting for
+          # a public MX -- anything stricter turns a peer's missing or
+          # broken TLS into undeliverable mail.
+          smtp_tls_security_level = "may";
+          smtp_tls_loglevel = "1";
 
           # TLS Protocol Configuration
           # Disable obsolete/insecure protocols: SSLv2, SSLv3, TLSv1.0

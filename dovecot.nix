@@ -298,11 +298,17 @@ in {
         "d ${cfg.state-directory}/sieves 0750 ${dovecotUser} ${dovecotGroup} - -"
       ];
 
-      # Prometheus exporter must start after Dovecot is ready
+      # Prometheus exporter must start after Dovecot is ready.
+      #
+      # The unit is `dovecot.service`, not `dovecot2.service`. Up to and
+      # including nixpkgs 25.11 the module carried
+      # `aliases = [ "dovecot2.service" ]` so the old name still resolved;
+      # 26.05 dropped that alias. A Requires= naming a unit that doesn't
+      # exist fails the job, so the exporter could not start at all.
       services = {
         prometheus-dovecot-exporter = {
-          requires = [ "dovecot2.service" ];
-          after = [ "dovecot2.service" ];
+          requires = [ "dovecot.service" ];
+          after = [ "dovecot.service" ];
         };
       };
     };
