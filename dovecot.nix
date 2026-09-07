@@ -17,7 +17,8 @@
 # - Sieve for filtering (spam learning, folder sorting, etc.)
 # - LDAP auth for centralized user management
 # - Virtual plugin for alias handling
-# - Quota support disabled (can be enabled per-user if needed)
+# - Quota support implemented (fudo.mail.dovecot.quota), with per-user
+#   exemptions via a passwd-file userdb consulted ahead of the static one
 #
 # Mail flow:
 # 1. Postfix accepts mail via SMTP
@@ -27,9 +28,9 @@
 # 5. Mail stored in Maildir format
 # 6. Users access via IMAP
 #
-# Spam learning flow:
-# - User moves spam to Junk folder -> ham.sieve -> rspamc learn_spam
-# - User moves ham from Junk -> spam.sieve -> rspamc learn_ham
+# Spam learning flow (see ./sieves):
+# - User moves mail INTO Junk   -> spam.sieve -> rspamc learn_spam
+# - User moves mail OUT of Junk -> ham.sieve  -> rspamc learn_ham
 
 with lib;
 let

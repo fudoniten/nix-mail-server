@@ -4,62 +4,84 @@ NixOS module configuration for a production mail server with comprehensive spam 
 
 ## Architecture
 
-This mail server uses a container-based architecture with the following components:
+This mail server runs as eight Arion containers in one project, `mail-server`.
+Container names are also the service names used throughout this document.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Internet Traffic                        │
-└────────────────┬────────────────────────┬────────────────────┘
-                 │                        │
-         ┌───────▼────────┐      ┌───────▼────────┐
-         │  Postfix SMTP  │      │ Dovecot IMAP   │
-         │  (25/587/465)  │      │   (143/993)    │
-         └───────┬────────┘      └───────┬────────┘
-                 │                       │
-         ┌───────▼────────┐      ┌──────▼─────────┐
-         │    Rspamd      │◄─────┤  Sieve Scripts │
-         │ Spam Filtering │      │  (ham/spam.sh) │
-         └───────┬────────┘      └────────────────┘
-                 │
-         ┌───────▼────────┐
-         │     ClamAV     │
-         │ Virus Scanning │
-         └────────────────┘
-                 │
-         ┌───────▼────────┐
-         │   OpenDKIM     │
-         │  Email Signing │
-         └────────────────┘
-                 │
-         ┌───────▼────────┐      ┌────────────────┐
-         │     Redis      │      │  LDAP/Authentik│
-         │ Bayes/Stats DB │      │ Authentication │
-         └────────────────┘      └────────────────┘
+                 Internet                       Mail clients
+                    │                          │           │
+              25 ───┤                    587/465           143/993
+                    ▼                          ▼           ▼
+            ┌───────────────┐            ┌───────────────┐
+            │     smtp      │  LMTP :24  │     imap      │
+            │    Postfix    │───────────▶│    Dovecot    │
+            │  + Dovecot    │            │  + Pigeonhole │
+            │   (SASL only) │            │  + Flatcurve  │
+            └───────┬───────┘            └───┬───────┬───┘
+         milters    │                        │       │
+        ┌───────────┴──────┐        learn    │       │  auth
+        ▼                  ▼        (Sieve)  │       │
+┌───────────────┐  ┌──────────────┐          │       │
+│   antispam    │  │     dkim     │◀─────────┘       │
+│    Rspamd     │  │   OpenDKIM   │  :11335          │
+└───┬───────┬───┘  └──────────────┘                  │
+    │       │                                        │
+    ▼       ▼                                        ▼
+┌────────┐ ┌───────┐                        ┌────────────────┐
+│antivirus│ │ redis │                       │   ldap-proxy   │
+│ ClamAV │ │ Bayes │                        │Authentik outpost│
+└────────┘ └───────┘                        └───────┬────────┘
+                                                    ▼
+                                                Authentik
+
+  metrics-proxy (nginx, published on metrics-port) scrapes
+  smtp:5035, imap:5036 and antispam:11336 on the internal network.
 ```
 
-### Component Responsibilities
+Four Docker/Podman networks separate the traffic: `external_network` (the only
+one with outbound access — needed by smtp for delivery, antispam for RBL
+lookups, antivirus for signature updates and ldap-proxy for Authentik),
+`internal_network` for inter-service traffic, and `redis_network` and
+`ldap_network` to keep those two backends off everything else.
 
-- **Postfix**: SMTP server for sending/receiving mail
-- **Dovecot**: IMAP server for mail access + LMTP for local delivery
-- **Rspamd**: Multi-layer spam filtering (Bayes, neural nets, reputation, RBL)
-- **ClamAV**: Antivirus scanning with automatic database updates
-- **OpenDKIM**: DKIM signing for outbound, verification for inbound
-- **Redis**: Backend for spam learning and statistics
-- **Authentik**: LDAP authentication provider
+### Component responsibilities
+
+| Container | Runs | Role |
+| --- | --- | --- |
+| `smtp` | Postfix + a protocol-less Dovecot | SMTP on 25, submission on 587 and 465. The Dovecot here exists only to answer SASL over a socket. |
+| `imap` | Dovecot + Pigeonhole + Flatcurve | IMAP on 143/993, LMTP delivery on 24, Sieve filtering, full-text search |
+| `antispam` | Rspamd | Milter on 11335, controller on 11336. Bayes, neural net, reputation, RBL, and the ClamAV hand-off |
+| `antivirus` | ClamAV | Signature scanning on 15407, with freshclam updates |
+| `dkim` | OpenDKIM | Milter on 5734: signs outbound for local domains, verifies inbound |
+| `redis` | Redis | Rspamd's statistics and learning backend |
+| `ldap-proxy` | Authentik LDAP outpost | Turns LDAP on 3389 into Authentik auth |
+| `metrics-proxy` | nginx | The only published metrics surface |
+
+Both milters run on every message, in order: Rspamd first (so its headers get
+signed), then OpenDKIM.
 
 ### Mail Flow
 
-**Incoming Mail:**
+**Incoming mail:**
 ```
-Internet → Postfix:25 → SPF Check → Rspamd → ClamAV → DKIM Verify →
-Dovecot LMTP → Sieve Filters → Maildir Storage
+Internet → smtp:25 → client/RBL, sender, recipient and HELO restrictions
+         → SPF policy check
+         → milters: antispam (which calls antivirus) then dkim (verify)
+         → LMTP to imap:24 → Sieve → Maildir
 ```
 
-**Outgoing Mail:**
+**Outgoing mail:**
 ```
-Client → Postfix:587 → SASL Auth → Sender Check → Rspamd → ClamAV →
-DKIM Sign → Internet
+Client → smtp:587 (STARTTLS) or smtp:465 (implicit TLS)
+       → SASL auth against the in-container Dovecot, via ldap-proxy
+       → sender login map check (no sending as anyone else)
+       → milters: antispam (headers suppressed for authenticated senders)
+                  then dkim (sign)
+       → opportunistic TLS out to the destination MX
 ```
+
+ClamAV is not a separate stage: Rspamd calls it as one of its checks, and
+rejects on a hit.
 
 **Spam Learning:**
 ```
@@ -122,42 +144,110 @@ Policies:
 
 ## Configuration
 
-### Required Options
+### Host prerequisites
+
+This module is not self-contained. The host configuration importing it must
+also provide:
+
+- **`virtualisation.arion.backend`** - `"docker"` or `"podman-socket"`. Arion
+  declares this with no default, so leaving it unset fails evaluation with
+  *"The option `virtualisation.arion.backend' is used but not defined"*.
+- **`config.instance.build-seed`** - a fudo-lib provision, used to derive the
+  internal passwords (Dovecot admin, Dovecot API key, Redis) when the
+  corresponding `internal-secrets.*-file` option is left null.
+- **`pkgs.lib.passwd.stablerandom-passwd-file`** - likewise from fudo-lib, and
+  likewise only needed when those options are null.
+
+Set all three `internal-secrets.*-file` options and `build-seed` is no longer
+consulted, but the overlay providing `pkgs.lib.passwd` still has to be present.
+
+### Required options
+
+Every option below has no default and must be set:
 
 ```nix
 fudo.mail = {
   enable = true;
-  primary-domain = "example.com";
-  extra-domains = [ "example.org" ];
 
+  primary-domain = "example.com";
   state-directory = "/var/lib/mail";
 
-  smtp.hostname = "smtp.example.com";
-  imap.hostname = "imap.example.com";
+  # SASL realm presented on the submission ports.
+  sasl-domain = "example.com";
+
+  # Directories holding fullchain.pem and key.pem for each hostname.
+  smtp.ssl-directory = "/run/credentials/smtp-certs";
+  imap.ssl-directory = "/run/credentials/imap-certs";
 
   ldap = {
-    host = "ldap.example.com";
     bind-dn = "cn=mail,ou=services,dc=example,dc=com";
-    bind-password-file = "/secrets/ldap-password";
-  };
+    bind-password-file = "/run/secrets/mail-ldap-password";
+    base = "dc=example,dc=com";
 
-  # See TODO.md for blacklist recommendations
-  blacklist.dns = [
-    "zen.spamhaus.org"
-    "bl.spamcop.net"
-  ];
+    # Exactly one of outpost-token / outpost-token-file. Setting both, or
+    # neither, trips an assertion.
+    outpost-token-file = "/run/secrets/authentik-outpost-token";
+  };
 };
 ```
 
-### Storage Paths
+Commonly set, but optional:
 
-**Important**: These paths need adequate disk space and should be backed up:
+```nix
+fudo.mail = {
+  extra-domains = [ "example.org" ];
 
-- `/var/lib/mail/mail` - User mailboxes (Maildir format)
-- `/var/lib/mail/dovecot` - Dovecot state, indexes, Sieve scripts
-- `/var/lib/opendkim` - DKIM private keys (**critical to backup**)
-- `/var/lib/clamav` - Virus definition database
-- `/var/lib/redis` - Spam learning data (Bayes, neural net)
+  # Default to smtp./imap. prefixed onto primary-domain.
+  smtp.hostname = "smtp.example.com";
+  imap.hostname = "imap.example.com";
+
+  # Defaults to authentik.<primary-domain>.
+  ldap.authentik-host = "authentik.example.com";
+
+  # See TODO.md item 17 for blacklist recommendations.
+  blacklist.dns = [ "zen.spamhaus.org" "bl.spamcop.net" ];
+
+  quota.enable = true;
+  fail2ban.enable = true;
+};
+```
+
+Note `ldap.host` is **not** an option; the LDAP endpoint is the Authentik
+outpost, addressed via `ldap.authentik-host`.
+
+### One account namespace across all domains
+
+Both Dovecot instances set `auth_username_format = %n`, and the Postfix sender
+login map carries a catch-all per domain. The domain part of an address is
+therefore discarded at authentication: `user@example.com` and
+`user@example.org` are the **same account**, with the same mailbox and the same
+password.
+
+That is usually what you want for a personal or small-organisation server
+hosting several domains. It is not what "multi-domain support" means elsewhere,
+so it is worth knowing before adding a second domain whose users are meant to
+be distinct people.
+
+### Storage paths
+
+All persistent state lives under `state-directory` on the host. With
+`state-directory = "/var/lib/mail"`:
+
+| Host path | Mounted in container at | Holds |
+| --- | --- | --- |
+| `/var/lib/mail/mail` | `imap:/mail` | User mailboxes (Maildir) |
+| `/var/lib/mail/dovecot` | `imap:/state` | Dovecot indexes, Sieve scripts |
+| `/var/lib/mail/dovecot-dhparams` | `imap:/var/lib/dhparams` | Generated DH parameters |
+| `/var/lib/mail/dkim` | `dkim:/var/lib/opendkim` | DKIM private keys |
+| `/var/lib/mail/antivirus` | `antivirus:/state` | ClamAV signature database |
+| `/var/lib/mail/redis` | `redis:/var/lib/redis-rspamd` | Bayes, neural net, reputation |
+| `/var/lib/mail/postfix` | `smtp:/var/lib/postfix` | Mail queue |
+
+**Back up `dkim` and `mail`.** Losing DKIM keys means republishing DNS and a
+period of failed signature verification; losing `mail` is unrecoverable. The
+`redis` directory is worth backing up too — it is the accumulated spam training,
+which takes weeks of real traffic to rebuild. `antivirus` and
+`dovecot-dhparams` regenerate themselves and need no backup.
 
 ### User/Group IDs
 
@@ -179,26 +269,39 @@ chown -R 5025:5025 /var/lib/mail/mail
    nixos-rebuild switch
    ```
 
-3. **Generate DKIM keys** (if not already present):
+3. **Check the containers came up**:
    ```bash
-   # Keys are auto-generated on first start
-   # Verify they exist:
-   ls -la /var/lib/opendkim/keys/
+   arion -p mail-server ps
+   ```
+   All of `smtp`, `imap`, `antispam`, `antivirus`, `dkim`, `redis`,
+   `ldap-proxy` and `metrics-proxy` should be running.
+
+4. **Generate DKIM keys** (auto-generated on the `dkim` container's first
+   start). Verify them on the host, where they are persisted:
+   ```bash
+   ls -la /var/lib/mail/dkim/keys/
    ```
 
-4. **Publish DKIM public key to DNS** (see DNS Requirements)
+5. **Publish the DKIM public key to DNS** (see DNS Requirements)
 
-5. **Test mail flow**:
+6. **Test mail flow**:
    ```bash
-   # Send test email
-   echo "Test" | mail -s "Test" user@example.com
+   # Send a test message in
+   swaks --to user@example.com --server <your-host>:25
 
-   # Check logs
-   journalctl -u postfix -f
-   journalctl -u dovecot2 -f
+   # Watch it move through the stack
+   arion -p mail-server logs -f smtp antispam imap
    ```
 
-6. **Verify DNS records**:
+7. **Test both submission ports**, since they fail independently:
+   ```bash
+   swaks --to user@example.com --from you@example.com \
+         --server smtp.example.com:587 --auth LOGIN --auth-user you --tls
+   swaks --to user@example.com --from you@example.com \
+         --server smtp.example.com:465 --auth LOGIN --auth-user you --tlsc
+   ```
+
+8. **Verify DNS records**:
    ```bash
    # Check MX
    dig MX example.com
@@ -220,96 +323,121 @@ chown -R 5025:5025 /var/lib/mail/mail
 
 ### Monitoring
 
-All services expose Prometheus metrics:
+Metrics are **not** served on the host by each service. Every exporter listens
+inside its own container, and a small nginx (`metrics-proxy`) is the only thing
+published — on `metrics-port`, default 5034:
 
-- Postfix metrics: `:1725/metrics`
-- Dovecot metrics: `:5034/metrics`
-- Rspamd metrics: served natively by the controller worker at `:11334/metrics` (OpenMetrics format)
+| Scrape URL | Proxied to |
+| --- | --- |
+| `http://<host>:5034/metrics/postfix` | `smtp:5035` |
+| `http://<host>:5034/metrics/dovecot` | `imap:5036` |
+| `http://<host>:5034/metrics/rspamd` | `antispam:11336` (rspamd's native OpenMetrics endpoint) |
 
-### Common Operations
+No other path is proxied; anything else returns 404.
 
-#### View Mail Queue
+> **This port is exposed.** Published container ports are DNAT'd before the
+> filter table, so `networking.firewall` does not gate them, and 5034 is not in
+> the module's `allowedTCPPorts` either. The proxy has no authentication. If the
+> host faces the internet, bind it to loopback or put auth in front of it.
+
+### Common operations
+
+All of these run *inside* a container. Prefix each with
+`arion -p mail-server exec <service>`; the service is named in each heading.
+
+#### Mail queue (`smtp`)
 ```bash
-mailq
-# or
-postqueue -p
+arion -p mail-server exec smtp mailq            # or: postqueue -p
+arion -p mail-server exec smtp postqueue -f     # flush
+arion -p mail-server exec smtp postsuper -d <queue-id>
+arion -p mail-server exec smtp postsuper -d ALL deferred
 ```
 
-#### Flush Mail Queue
+The queue is persisted to `<state-directory>/postfix` on the host, so it now
+survives container recreation.
+
+#### Check spam scores
+Look for `X-Spam`, `X-Spamd-Result` and `X-Rspamd-Server` headers in the source
+of a received message. Note these are added on *inbound* mail only —
+`skip_authenticated` keeps them off anything your own users send.
+
+#### Train the spam filter manually (`antispam`)
 ```bash
-postqueue -f
+arion -p mail-server exec antispam rspamc learn_spam < spam-message.eml
+arion -p mail-server exec antispam rspamc learn_ham  < ham-message.eml
+arion -p mail-server exec antispam rspamc stat
 ```
 
-#### Delete Message from Queue
+No `-h` needed from inside the container. Day to day this is automatic: moving
+a message into Junk trains it as spam, moving one out trains it as ham, via the
+Sieve scripts in `./sieves`.
+
+#### Rspamd web UI (`antispam`)
+The controller listens on port **11336** inside the container and is not
+published to the host. Only `/metrics` is reachable, through the metrics proxy.
+To reach the UI, forward the port yourself:
+
 ```bash
-postsuper -d <queue-id>
+arion -p mail-server exec antispam rspamadm control stat   # or
+ssh -L 11336:localhost:11336 <host>   # then browse via a port-forward
 ```
 
-#### Delete All Deferred Mail
+No controller password is configured, so treat the port as sensitive.
+
+#### ClamAV status (`antivirus`)
 ```bash
-postsuper -d ALL deferred
+arion -p mail-server exec antivirus systemctl status clamav-daemon
+arion -p mail-server exec antivirus systemctl status clamav-freshclam
+arion -p mail-server exec antivirus clamdscan --version
 ```
 
-#### Check Spam Scores
-Look for `X-Spam-Score` and `X-Spam-Report` headers in email source.
+#### Regenerate DKIM keys (`dkim`)
+Keys live at `<state-directory>/dkim/keys` on the host, which is
+`/var/lib/opendkim/keys` inside the container. Either path reaches the same
+files, so the backup step is easiest done host-side:
 
-#### Train Spam Filter Manually
 ```bash
-# Learn as spam
-rspamc -h rspamd learn_spam < spam-message.eml
+arion -p mail-server stop dkim
+mv /var/lib/mail/dkim/keys /var/lib/mail/dkim/keys.backup
+arion -p mail-server start dkim
 
-# Learn as ham
-rspamc -h rspamd learn_ham < ham-message.eml
-
-# Check Bayes statistics
-rspamc -h rspamd stat
+# Read the new public key and publish it at mail._domainkey.example.com
+cat /var/lib/mail/dkim/keys/example.com/mail.txt
 ```
 
-#### View Rspamd Web UI
-Access the controller at `http://mail-server:11334` (configure password first).
+Publish the new TXT record **before** the old key stops being used, or outbound
+mail fails DKIM verification in the gap.
 
-#### Check ClamAV Status
+### Log locations
+
+Every service runs inside a container, so `journalctl -u postfix` on the host
+finds nothing — there is no such unit. Reach the containers through Arion
+instead. The project is named `mail-server`, and the services are `smtp`,
+`imap`, `antispam`, `antivirus`, `dkim`, `redis`, `ldap-proxy` and
+`metrics-proxy`.
+
 ```bash
-systemctl status clamav-daemon
-systemctl status clamav-updater
+# Whole project, following
+arion -p mail-server logs -f
 
-# Check database version
-clamdscan --version
+# One service
+arion -p mail-server logs -f smtp
+arion -p mail-server logs -f antispam
+
+# A shell inside a container, where the usual unit names DO work
+arion -p mail-server exec smtp journalctl -u postfix -n 100
+arion -p mail-server exec imap journalctl -u dovecot -n 100
+arion -p mail-server exec antispam journalctl -u rspamd -n 100
 ```
 
-#### Regenerate DKIM Keys
-```bash
-# Stop OpenDKIM
-systemctl stop opendkim
+Note the Dovecot unit is `dovecot.service`. nixpkgs used to alias
+`dovecot2.service` to it; 26.05 dropped the alias.
 
-# Backup old keys
-mv /var/lib/opendkim/keys /var/lib/opendkim/keys.backup
-
-# Restart to generate new keys
-systemctl start opendkim
-
-# Update DNS with new public key
-cat /var/lib/opendkim/keys/example.com/mail.txt
-```
-
-### Log Locations
+The host units that *do* exist are the ones this module adds directly:
 
 ```bash
-# Postfix
-journalctl -u postfix
-
-# Dovecot
-journalctl -u dovecot2
-
-# Rspamd
-journalctl -u rspamd
-
-# ClamAV
-journalctl -u clamav-daemon
-journalctl -u clamav-updater
-
-# OpenDKIM
-journalctl -u opendkim
+journalctl -u arion-mail-server   # container orchestration
+journalctl -u mail-secrets        # boot-time secret assembly
 ```
 
 ### Testing Email Delivery
@@ -342,53 +470,95 @@ swaks --to user@example.com \
 
 ## Security Notes
 
-### Current Security Model
+### Current security model
 
-- **TLS**: Required for submission (587/465) and IMAP (993), optional for SMTP (25)
-- **Authentication**: LDAP via Authentik
-- **Sender Validation**: `reject_sender_login_mismatch` prevents spoofing
-- **Multi-layer Filtering**: Restrictions at sender, relay, recipient, client, HELO levels
-- **Spam Protection**: Rspamd (Bayes, neural nets, RBL) + ClamAV
-- **Email Signing**: DKIM for all outbound mail
+- **TLS**: required for submission (587 STARTTLS, 465 implicit) and IMAPS (993);
+  opportunistic on port 25 in both directions, which is all a public MX can do.
+  TLS 1.2+ only.
+- **Authentication**: LDAP via the Authentik outpost. Plaintext auth is refused
+  on the IMAP instance; the SASL instance serves no protocols at all.
+- **Sender validation**: `reject_sender_login_mismatch` stops an authenticated
+  user sending as anyone else, and stops unauthenticated senders forging a
+  local domain.
+- **Multi-layer filtering**: restrictions at the client, sender, relay,
+  recipient and HELO stages, with DNS blacklists consulted once at the client
+  stage.
+- **Rate limiting**: per-client-IP message, recipient and connection limits on
+  the submission listeners, to contain a compromised account. Port 25 is
+  deliberately unlimited so busy legitimate peers are not deferred.
+- **Spam protection**: Rspamd (Bayes, neural net, reputation, RBL) + ClamAV.
+- **Email signing**: DKIM on all outbound mail.
 
-### Known Security Issues
+### Known security issues
 
-**See TODO.md for detailed list**, but critically:
+**See TODO.md for the detailed list.** The ones worth knowing before deploying:
 
-1. **Secrets in Nix Store**: Passwords are currently stored in world-readable Nix store. This needs to be migrated to runtime secret injection (systemd `LoadCredential` or similar).
+1. **The metrics proxy is unauthenticated and firewall-exempt.** Published
+   container ports bypass `networking.firewall`, so `metrics-port` (5034) is
+   reachable from anywhere the host is. See the Monitoring section.
 
-2. **No Intrusion Prevention**: No fail2ban or similar configured. Brute force attacks are not automatically blocked.
+2. **fail2ban probably does not work here**, even when `fail2ban.enable` is set.
+   The jails match on `_SYSTEMD_UNIT=postfix.service`, but Postfix and Dovecot
+   run in containers and their logs reach the journal tagged with the container
+   runtime's unit instead; and bans land in `INPUT`, which DNAT'd container
+   traffic bypasses. `fail2ban-client status postfix-sasl` showing zero matches
+   over a period when the logs show failed logins confirms it.
 
-3. **No Rate Limiting**: No outbound rate limits configured. If an account is compromised, it could be used to send spam.
+3. **Internal secrets default to build-seed derivation.** The Dovecot admin
+   password, Dovecot API key and Redis password are, by default, derived
+   deterministically from `build-seed` and land in the world-readable Nix store.
+   The LDAP bind password and Authentik outpost token are read at runtime and
+   never do. Point the three `internal-secrets.*-file` options at a real secrets
+   store to close this.
+
+4. **The Rspamd controller has no password.** It is not published to the host,
+   so this only matters to anything else on the container networks.
 
 ## Troubleshooting
 
-### Mail Not Being Delivered
+### Mail not being delivered
 
-1. **Check queue**: `mailq`
-2. **Check logs**: `journalctl -u postfix -n 100`
-3. **Common issues**:
-   - Reverse DNS not configured
-   - SPF/DKIM records incorrect or missing
+1. **Check the queue**: `arion -p mail-server exec smtp mailq`
+2. **Check the logs**: `arion -p mail-server logs --tail 100 smtp`
+3. **Common causes**:
+   - Reverse DNS not configured, or not matching `smtp.hostname`
+   - SPF/DKIM/DMARC records incorrect or missing
    - IP address blacklisted (check mxtoolbox.com)
-   - Recipient server blocking (check bounce messages)
+   - Recipient server blocking (read the bounce)
 
-### Authentication Failures
+### Authentication failures
 
-1. **Check LDAP connectivity**:
+1. **Check LDAP connectivity** from inside the container that does the lookup —
+   the Authentik outpost is on an internal network and is not reachable from the
+   host:
    ```bash
-   ldapsearch -H ldap://authentik -D "bind-dn" -W -b "base-dn"
+   arion -p mail-server exec imap \
+     ldapsearch -H ldap://ldap-proxy:3389 -D "<bind-dn>" -W -b "<base>"
    ```
-2. **Check Dovecot auth logs**: `journalctl -u dovecot2 | grep auth`
-3. **Enable debug mode** in configuration (see `debug` options)
+2. **Check Dovecot auth logs**:
+   `arion -p mail-server exec imap journalctl -u dovecot | grep auth`
+3. **Check the outpost itself**: `arion -p mail-server logs ldap-proxy`
+4. **Enable debug mode**: set `fudo.mail.debug = true`, which turns on
+   `auth_debug` in both Dovecot instances and verbose Postfix logging.
 
-### Spam Not Being Caught
+Remember the domain part of the login is discarded (see *One account namespace*
+above) — authenticating as `user@example.com` and `user` are the same thing.
 
-1. **Check if Rspamd is running**: `systemctl status rspamd`
-2. **Verify Bayes training**: `rspamc stat`
-3. **Check if ClamAV is running**: `systemctl status clamav-daemon`
-4. **Review spam headers**: Look for `X-Spam-Score` in message headers
-5. **Train filter**: Users should move spam to Junk folder (auto-learning)
+### Spam not being caught
+
+1. **Is Rspamd running**:
+   `arion -p mail-server exec antispam systemctl status rspamd`
+2. **Is Bayes actually trained**:
+   `arion -p mail-server exec antispam rspamc stat`
+   — a corpus of zero means learning is not reaching Redis.
+3. **Is Redis persisting**: `ls <state-directory>/redis`. If that directory is
+   empty on a server that has been running a while, training is being thrown
+   away on every rebuild.
+4. **Is ClamAV running**:
+   `arion -p mail-server exec antivirus systemctl status clamav-daemon`
+5. **Review the headers**: `X-Spamd-Result` on a received message shows every
+   symbol that fired and its score.
+6. **Train it**: moving mail into and out of Junk trains it automatically.
 
 ### High CPU Usage
 
@@ -402,9 +572,9 @@ swaks --to user@example.com \
    du -sh /var/lib/mail/mail/* | sort -h
    ```
 3. **Consider**:
-   - Implementing quotas (see TODO.md)
-   - Auto-expunge of Trash/Junk (partially implemented)
-   - User notification
+   - Turning on quotas: `fudo.mail.quota.enable = true` with `quota.limit`
+   - Auto-expunge, already configured for Trash (30d), Junk and Drafts (60d)
+   - `quota.exemptions` for accounts that should not be capped
 
 ## Performance Tuning
 
@@ -442,23 +612,31 @@ Consider increasing:
 - See inline comments in each `.nix` file for detailed explanations
 - See `TODO.md` for planned improvements and known issues
 
-### Useful Commands
+### Useful commands
+
+All container-side, via `arion -p mail-server exec <service>`:
 
 ```bash
-# Postfix configuration check
-postfix check
+# Postfix config check and effective settings
+arion -p mail-server exec smtp postfix check
+arion -p mail-server exec smtp postconf -n
 
-# Test Postfix config
-postconf -n
+# Dovecot effective config (both instances -- smtp runs a SASL-only one)
+arion -p mail-server exec imap doveconf -n
+arion -p mail-server exec smtp doveconf -n
 
-# Dovecot configuration check
-doveconf -n
+# Rspamd config check
+arion -p mail-server exec antispam rspamadm configtest
 
-# Rspamd configuration check
-rspamadm configtest
+# Per-container service status
+arion -p mail-server exec smtp      systemctl status postfix
+arion -p mail-server exec imap      systemctl status dovecot
+arion -p mail-server exec antispam  systemctl status rspamd
+arion -p mail-server exec antivirus systemctl status clamav-daemon
+arion -p mail-server exec dkim      systemctl status opendkim
 
-# Mail system status
-systemctl status postfix dovecot2 rspamd clamav-daemon opendkim
+# Whole stack, from the host
+arion -p mail-server ps
 ```
 
 ### External Testing Tools
@@ -470,6 +648,11 @@ systemctl status postfix dovecot2 rspamd clamav-daemon opendkim
 
 ## Version Information
 
+- **nixpkgs**: `nixos-26.05`. The modules use the 26.05 rewrites of
+  `services.dovecot2` and `services.postfix` (`settings.main`,
+  `settings.master`, `includeFiles`) and do not evaluate on 25.11.
+- **Arion**: unpinned (`github:hercules-ci/arion`), following this flake's
+  nixpkgs.
 - **Postfix**: System default (via NixOS)
 - **Dovecot**: pinned to 2.3 (`pkgs.dovecot_2_3`), NOT the system default --
   nixpkgs 26.05 defaults to 2.4, which is a breaking change for this
@@ -481,9 +664,9 @@ systemctl status postfix dovecot2 rspamd clamav-daemon opendkim
 
 Check versions with:
 ```bash
-postconf mail_version
-doveconf -n | grep "^# "
-rspamd --version
-clamd --version
-opendkim -V
+arion -p mail-server exec smtp      postconf mail_version
+arion -p mail-server exec imap      doveconf -n | grep "^# "
+arion -p mail-server exec antispam  rspamd --version
+arion -p mail-server exec antivirus clamd --version
+arion -p mail-server exec dkim      opendkim -V
 ```

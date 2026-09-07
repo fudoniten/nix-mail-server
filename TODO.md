@@ -16,14 +16,24 @@
 
 ## Critical Security Issues
 
-### 1. Secrets in Nix Store [CRITICAL]
+### 1. Secrets in Nix Store [PARTIAL]
 
-**Priority: HIGH**
+**Priority: MEDIUM** (was HIGH)
 
-Currently, secrets are embedded directly in the Nix store which is world-readable:
+**Status**: the secrets that need external coordination now come from runtime
+paths, assembled at start-up by the `mail-secrets` unit rather than baked in at
+eval time: `ldap.bind-password-file` and `ldap.outpost-token-file`.
 
-- `rspamd.nix:91`: Redis password embedded in config
-- `mail-server.nix:224,456`: LDAP bind password via `readFile`
+**Still open**: the three internal secrets -- the Dovecot admin password, the
+Dovecot doveadm API key, and the Redis password shared with rspamd -- still
+default to a value derived deterministically from `build-seed` and stored in the
+world-readable Nix store. Each has an `internal-secrets.*-file` option; setting
+all three to paths from a real secrets store closes this completely.
+
+The original problem, for reference:
+
+- `rspamd.nix`: Redis password embedded in config
+- `mail-server.nix`: LDAP bind password via `readFile`
 - Auto-generated passwords for Dovecot admin and API keys
 
 **Impact**: Any user on the system can read these secrets.
@@ -50,11 +60,28 @@ systemd.services.rspamd.serviceConfig.LoadCredential = "redis-password:/secrets/
 
 ---
 
-### 2. No Intrusion Prevention System [COMPLETED ✅]
+### 2. No Intrusion Prevention System [PARTIAL -- VERIFY]
 
 **Priority: HIGH**
 
-**Status: COMPLETED** - fail2ban is now configured with jails for Postfix SASL and Dovecot authentication.
+**Status**: fail2ban is configured, with jails for Postfix SASL and Dovecot
+authentication. It is **not confirmed to do anything**, and there are two
+concrete reasons to expect it does not:
+
+1. The jails use `backend = "systemd"`, whose filters match
+   `_SYSTEMD_UNIT=postfix.service`. Postfix and Dovecot run inside containers,
+   so their output reaches the host journal tagged with the container runtime's
+   unit and `CONTAINER_NAME` fields instead. The filters will not match.
+2. Bans are inserted into `INPUT`. Traffic to published container ports is
+   DNAT'd and bypasses that chain -- it would need `DOCKER-USER` or the
+   netavark equivalent.
+
+**To verify**: run `fail2ban-client status postfix-sasl` after a period during
+which the logs show failed authentications. Zero matches confirms (1).
+
+**If it is broken**, the options are to ship logs out of the containers in a
+form the filters recognise and fix the ban chain, or to drop fail2ban and say so
+plainly rather than leaving apparent protection in place.
 
 Previously: No fail2ban or similar IPS configured. Mail servers are constantly attacked with brute force attempts on:
 - SMTP AUTH (ports 587, 465)
@@ -130,11 +157,18 @@ Previously: SPF and DKIM are configured, but DMARC checking is missing. DMARC pr
 
 **Priority: CRITICAL**
 
-No backup configuration or documentation for critical data:
-- User mailboxes (`/var/lib/mail/mail`)
-- DKIM private keys (`/var/lib/opendkim`)
-- Rspamd learning data (`/var/lib/redis`)
-- Dovecot indexes and state
+No backup configuration or documentation for critical data. Everything lives
+under `state-directory` on the host -- these are NOT the in-container paths,
+which is what this item used to list:
+
+| Path (with `state-directory = /var/lib/mail`) | Loss means |
+| --- | --- |
+| `/var/lib/mail/mail` | Unrecoverable. User mailboxes. |
+| `/var/lib/mail/dkim` | Republish DNS, plus a window of failed verification. |
+| `/var/lib/mail/redis` | Weeks of accumulated spam training. |
+| `/var/lib/mail/dovecot` | Recoverable -- indexes and Sieve scripts rebuild. |
+| `/var/lib/mail/postfix` | Queued mail in flight at backup time. |
+| `/var/lib/mail/antivirus` | Nothing; freshclam re-fetches. |
 
 **Impact**: Data loss in case of hardware failure or corruption.
 
@@ -145,19 +179,22 @@ No backup configuration or documentation for critical data:
 services.restic.backups.mail = {
   repository = "s3:bucket/mail-backups";
   paths = [
-    "/var/lib/mail"
-    "/var/lib/opendkim"
-    "/var/lib/redis"
+    "/var/lib/mail/mail"
+    "/var/lib/mail/dkim"
+    "/var/lib/mail/redis"
   ];
   timerConfig = {
     OnCalendar = "daily";
   };
   exclude = [
-    "/var/lib/mail/*/Trash"
-    "/var/lib/mail/*/Junk"
+    "/var/lib/mail/mail/*/.Trash"
+    "/var/lib/mail/mail/*/.Junk"
   ];
 };
 ```
+
+Note Redis should be snapshotted while consistent -- a plain file copy of a
+live `dump.rdb` can be torn.
 
 2. **Document backup procedures** in README
 3. **Add restore testing** to maintenance schedule
@@ -480,11 +517,17 @@ to re-enable vectorscan for faster regex matching.
 
 ---
 
-### 16. Redis Persistence Configuration
+### 16. Redis Persistence Configuration [PARTIAL]
 
 **Priority**: LOW
 
-Redis persistence not explicitly configured. Using defaults.
+**Status**: the container volume was mounted at `/var/lib/redis` while the NixOS
+redis module writes to `/var/lib/redis-rspamd` (it derives the directory from
+the server name), so *nothing was persisted at all* -- the entire Bayes corpus,
+neural model and reputation data were discarded on every container recreation.
+The mount now points at the right path.
+
+**Still open**: save/appendonly policy is whatever Redis defaults to.
 
 **Consideration**: Tune RDB/AOF settings based on mail volume and recovery requirements.
 
@@ -693,38 +736,68 @@ each step.
 
 ---
 
-## Priority Summary
+## Status Summary
 
-### Immediate (Next Sprint)
-1. ✅ **Secrets Management** - Critical security issue
-2. ✅ **Intrusion Prevention (fail2ban)** - Critical security issue
-3. ✅ **Backup Strategy** - Critical operational issue
+Legend: **DONE** shipped and believed working / **PARTIAL** shipped but
+incomplete or unverified / **OPEN** not started.
 
-### Short Term (Next Month)
-4. ✅ **DMARC Support** - Important security feature
-5. ✅ **Rate Limiting** - Prevent abuse
-6. ✅ **Monitoring Alerts** - Operational visibility
-7. ✅ **Recipient Validation** - Reduce backscatter
+Ordered by what would most improve the deployment, not by item number.
 
-### Medium Term (Next Quarter)
-8. ✅ **Log Aggregation** - Better debugging
-9. ✅ **Certificate Auto-renewal** - Operational improvement
-10. ✅ **Mail Quotas** - Prevent disk space issues
-11. ✅ **Greylisting** - Additional spam protection
+### Do next
 
-### Long Term (When Needed)
-12. ✅ **Hyperscan** - Optional build flag, off on pre-SSE4.2 hosts (see item 15)
-13. ✅ **Vacation/Autoresponder** - User feature
-14. ✅ **Archive** - If compliance needed
-15. ✅ **Webmail** - User convenience
-16. ✅ **Automated Testing** - Quality assurance
+| # | Item | Status | Note |
+| --- | --- | --- | --- |
+| 23 | Automated testing | OPEN | Highest leverage in the list. A `nixosTest` booting the stack and exercising LMTP, IMAP login and both submission ports would have caught several shipped bugs on the first run. |
+| 4 | Backup strategy | OPEN | `dkim` and `mail` under state-directory are unrecoverable if lost; `redis` is weeks of spam training. |
+| 2 | Intrusion prevention | PARTIAL | fail2ban is configured, but its jails match host journal units while the services run in containers, and bans land in `INPUT` which container traffic bypasses. Probably matches nothing. Verify before relying on it. |
+| 6 | Monitoring alerts | OPEN | Metrics are exposed; nothing alerts on them. |
+
+### Shipped
+
+| # | Item | Status | Note |
+| --- | --- | --- | --- |
+| 1 | Secrets management | PARTIAL | LDAP bind password and outpost token are read at runtime. The three `internal-secrets.*` still default to build-seed derivation in the Nix store; set the `*-file` options to close it. |
+| 3 | DMARC support | DONE | Checking is on. Aggregate *reporting* is deliberately off — it needs a real org_name and a `rspamd_dmarc_report` timer. |
+| 7 | Rate limiting | DONE | Now on the submission listeners only; applying them in main.cf throttled inbound mail from busy peers. |
+| 9 | Recipient validation | DONE | LDAP recipient maps. |
+| 10 | Mail quotas | DONE | Off by default; `quota.enable = true` to use. |
+| 12 | TLSv1.1 deprecation | DONE | Expressed as `>=TLSv1.2`. |
+| 14 | DNS documentation | DONE | See README. |
+| 15 | Hyperscan | DONE | Build option, off on pre-SSE4.2 hosts. |
+| 16 | Redis persistence | PARTIAL | The volume now points at `/var/lib/redis-rspamd`, where Redis actually writes — previously nothing persisted at all. Save/appendonly policy is still Redis' default. |
+
+### Open
+
+| # | Item | Status | Note |
+| --- | --- | --- | --- |
+| 5 | Log retention/aggregation | OPEN | Complicated by container logging; see README. |
+| 8 | Greylisting | OPEN | Rspamd module exists, not enabled. |
+| 11 | Certificate auto-renewal | OPEN | Certs are supplied to the module as directories; renewal is the host's job. |
+| 13 | Hardcoded UID/GID 5025 | OPEN | Deliberate — documented in the README rather than changed. |
+| 17 | Blacklist recommendations | OPEN | Documentation. |
+| 18 | Sieve documentation | OPEN | Partly addressed: the scripts are now real files in `./sieves`. |
+| 19 | Vacation/autoresponder | OPEN | |
+| 20 | Compliance archive | OPEN | Only if needed. |
+| 21 | Webmail | OPEN | Also the strongest reason to add OAuth. |
+| 22 | SRS | OPEN | `useSrs` was removed upstream in favour of `services.pfix-srsd`. |
+| 24 | Health checks | OPEN | |
+| 25 | Dovecot 2.4 migration | OPEN | Deferred, not optional — `dovecot_2_3` will not stay in nixpkgs forever. Schedule it; do any OAuth work as part of it. |
+
+### Not in this list
+
+Findings from the repository review that have not been turned into numbered
+items: eight host-verification items (does fail2ban match anything, is
+per-user Sieve storage writable, is IPv6 reachable, is the metrics port
+exposed, and so on). These need a running deployment to settle rather than a
+code change.
 
 ---
 
 ## Notes
 
-- Items marked ✅ indicate they should be prioritized based on security/operational impact
-- Estimated efforts are rough and may vary based on specific requirements
-- Some features (like webmail, archiving) may not be needed for all deployments
-- Test all changes in staging environment before production deployment
-- Review and update this TODO periodically as items are completed or priorities change
+- Estimated efforts are rough and vary with the deployment.
+- Some items (webmail, archiving) are not needed for every deployment.
+- Test in staging before production.
+- Revisit this file when items are completed — it drifted badly once already,
+  with every item marked with a checkmark that meant "should be prioritized"
+  while reading as "done".
