@@ -17,7 +17,8 @@
 # - Sieve for filtering (spam learning, folder sorting, etc.)
 # - LDAP auth for centralized user management
 # - Virtual plugin for alias handling
-# - Quota support disabled (can be enabled per-user if needed)
+# - Quota support implemented (fudo.mail.dovecot.quota), with per-user
+#   exemptions via a passwd-file userdb consulted ahead of the static one
 #
 # Mail flow:
 # 1. Postfix accepts mail via SMTP
@@ -27,9 +28,9 @@
 # 5. Mail stored in Maildir format
 # 6. Users access via IMAP
 #
-# Spam learning flow:
-# - User moves spam to Junk folder -> ham.sieve -> rspamc learn_spam
-# - User moves ham from Junk -> spam.sieve -> rspamc learn_ham
+# Spam learning flow (see ./sieves):
+# - User moves mail INTO Junk   -> spam.sieve -> rspamc learn_spam
+# - User moves mail OUT of Junk -> ham.sieve  -> rspamc learn_ham
 
 with lib;
 let
@@ -244,11 +245,9 @@ in {
       };
     };
 
-    max-user-connections = mkOption {
-      type = int;
-      description = "Maximum allowed simultaneous connections by one user.";
-      default = 5;
-    };
+    # A `max-user-connections` option lived here. Nothing consumed it --
+    # no mail_max_userip_connections was ever emitted -- so it advertised
+    # a limit this module does not impose.
 
     ldap-conf = mkOption {
       type = str;
@@ -295,14 +294,20 @@ in {
       tmpfiles.rules = [
         "d ${cfg.state-directory}        0711 root root - -"
         "d ${cfg.mail-directory}         0750 ${cfg.mail-user} ${cfg.mail-group} - -"
-        "d ${cfg.state-directory}/sieves 0750 ${dovecotUser} ${dovecotGroup} - -"
+        "d ${sieveDirectory} 0750 ${dovecotUser} ${dovecotGroup} - -"
       ];
 
-      # Prometheus exporter must start after Dovecot is ready
+      # Prometheus exporter must start after Dovecot is ready.
+      #
+      # The unit is `dovecot.service`, not `dovecot2.service`. Up to and
+      # including nixpkgs 25.11 the module carried
+      # `aliases = [ "dovecot2.service" ]` so the old name still resolved;
+      # 26.05 dropped that alias. A Requires= naming a unit that doesn't
+      # exist fails the job, so the exporter could not start at all.
       services = {
         prometheus-dovecot-exporter = {
-          requires = [ "dovecot2.service" ];
-          after = [ "dovecot2.service" ];
+          requires = [ "dovecot.service" ];
+          after = [ "dovecot.service" ];
         };
       };
     };
@@ -340,36 +345,16 @@ in {
         learnHam = teachRspamd "learn_ham";
         learnSpam = teachRspamd "learn_spam";
 
-        reportSpam = builtins.toFile "spam.sieve" ''
-          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
-
-          if environment :matches "imap.user" "*" {
-            set "username" "''${1}";
-          }
-
-          pipe :copy "rspamd_learn_spam" [ "''${username}" ];
-        '';
-        reportHam = builtins.toFile "ham.sieve" ''
-          require ["vnd.dovecot.pipe", "copy", "imapsieve", "environment", "variables"];
-
-          if environment :matches "imap.mailbox" "*" {
-            set "mailbox" "''${1}";
-          }
-
-          if string "''${mailbox}" "Trash" {
-            stop;
-          }
-
-          if string "''${mailbox}" "Junk" {
-            stop;
-          }
-
-          if environment :matches "imap.user" "*" {
-            set "username" "''${1}";
-          }
-
-          pipe :copy "rspamd_learn_ham" [ "''${username}" ];
-        '';
+        # The three Sieve scripts live in ./sieves as real files rather
+        # than as heredocs here. They used to be inline, duplicated
+        # verbatim by unreferenced copies in that directory -- two sources
+        # of truth, one of which nothing read and neither of which could
+        # drift visibly. As paths they also stop needing the escape dance
+        # that Nix string interpolation forces on Sieve's own ${...}
+        # variables.
+        reportSpam = ./sieves/spam.sieve;
+        reportHam = ./sieves/ham.sieve;
+        fileSpam = ./sieves/file-spam.sieve;
 
         # Wrap decode2text.sh with required utilities
         # The original script needs dirname, grep, and cut which aren't in PATH by default
@@ -396,9 +381,19 @@ in {
           ''}
         '';
 
-        # Userdb override for quota exemptions
-        userdbOverride = pkgs.writeText "dovecot-userdb-override" (concatStringsSep
-          "\n" (map (user: "${user}::::::quota_rule=*:storage=0") cfg.quota.exemptions));
+        # Userdb override for quota exemptions: one bare entry per exempt
+        # user, no fields. These lines only have to MATCH -- the userdb
+        # block below carries `override_fields = quota_rule=*:storage=0`,
+        # which is what actually applies the exemption (and, being an
+        # override, wins over anything written here anyway).
+        #
+        # They previously carried the rule inline as
+        # `${user}::::::quota_rule=*:storage=0`, which was a field short:
+        # passwd-file is user:password:uid:gid:gecos:home:shell:extra_fields,
+        # so with six colons `quota_rule=*` landed in the SHELL field and
+        # only `storage=0` reached extra_fields.
+        userdbOverride = pkgs.writeText "dovecot-userdb-override"
+          (concatStringsSep "\n" (map (user: "${user}::::::") cfg.quota.exemptions));
 
         mailUserUid = config.users.users."${cfg.mail-user}".uid;
 
@@ -446,8 +441,11 @@ in {
             fts = flatcurve
             fts_autoindex = yes
             fts_enforced = yes
+            # Numbered, not repeated: Dovecot does not accumulate repeated
+            # keys, so a second plain `fts_autoindex_exclude` overwrote the
+            # first and Trash was being indexed after all.
             fts_autoindex_exclude = \Trash
-            fts_autoindex_exclude = \Junk
+            fts_autoindex_exclude2 = \Junk
             fts_decoder = decode2text
 
             # Flatcurve requires language configuration for stemming
@@ -455,6 +453,17 @@ in {
             fts_tokenizers = generic email-address
             fts_tokenizer_generic = algorithm=simple maxlen=30
             fts_tokenizer_email_address = maxlen=100
+
+            # Sieve. Dovecot merges repeated `plugin` sections, so the
+            # three this file used to emit were one section written in
+            # three places; they are collected here instead.
+            sieve = file:${sieveDirectory}/%u/scripts;active=${sieveDirectory}/%u/active.sieve
+            sieve_default_name = default
+
+            # old_stats, which feeds the Prometheus exporter via the
+            # `service old-stats` sockets below.
+            old_stats_refresh = 30 secs
+            old_stats_track_cmds = yes
 
             ${
               optionalString cfg.quota.enable ''
@@ -544,12 +553,6 @@ in {
             }
           }
 
-          plugin {
-            sieve = file:${cfg.state-directory}/sieves/%u/scripts;active=${cfg.state-directory}/sieves/%u/active.sieve
-            # sieve_default = file:${sieveDirectory}/%u/default.sieve
-            sieve_default_name = default
-          }
-
           service decode2text {
             executable = script ${wrappedDecode2Text}
             user = ${dovecotUser}
@@ -580,11 +583,6 @@ in {
               user = ${dovecotUser}
               group = ${dovecotGroup}
             }
-          }
-
-          plugin {
-            old_stats_refresh = 30 secs
-            old_stats_track_cmds = yes
           }
         '';
 
@@ -646,16 +644,7 @@ in {
           # Replaces the hand-rolled buildEnv + sieve_pipe_bin_dir: the module
           # builds the same link farm and adds sieve_extprograms for us.
           pipeBins = map getExe [ learnHam learnSpam ];
-          scripts = {
-            after = builtins.toFile "spam.sieve" ''
-              require [ "fileinto" ];
-
-              if header :is "X-Spam" "Yes" {
-                fileinto "Junk";
-                stop;
-              }
-            '';
-          };
+          scripts.after = fileSpam;
         };
 
         # Everything below was a dedicated option before 26.05 rewrote this

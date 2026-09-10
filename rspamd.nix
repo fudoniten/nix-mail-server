@@ -24,7 +24,15 @@
 # TODO: Add support for custom DNS blacklists configuration
 
 with lib;
-let cfg = config.fudo.mail.rspamd;
+let
+  cfg = config.fudo.mail.rspamd;
+
+  # Where the assembled Redis password lands at run time, and the UCL
+  # include that pulls it into the redis section. Written once here
+  # because the unit that creates the file and the config that reads it
+  # have to agree, and they are ~300 lines apart.
+  redisPasswordDir = "/run/rspamd-secrets";
+  redisPasswordFile = "${redisPasswordDir}/redis-password.conf";
 
 in {
   options.fudo.mail.rspamd = with types; {
@@ -112,14 +120,33 @@ in {
       '';
     }];
 
-    # rspamd merges every file under local.d/ (which is what `locals`
-    # writes into) at its own start-up, so the password can be handed to
-    # it as a SEPARATE file from the one `locals."redis.conf"` manages --
-    # written by a plain systemd unit that reads the runtime path when the
-    # service actually starts, rather than baked into the Nix-managed
-    # config file at eval time the way it used to be. No ConditionPathExists:
-    # a skipped unit counts as satisfied, so rspamd would start anyway and
-    # fail to authenticate to Redis with a far less obvious error.
+    # The password is handed to rspamd as a SEPARATE file from the one
+    # `locals."redis.conf"` manages, written by a plain systemd unit that
+    # reads the runtime path when the service actually starts rather than
+    # baked into the Nix-managed config at eval time.
+    #
+    # It goes in /run, NOT /etc/rspamd/local.d, even though local.d is
+    # where rspamd merges config from and where this used to write. Inside
+    # an Arion/NixOS container /etc is a read-only overlay, so `install -d`
+    # there fails outright:
+    #
+    #   install: cannot change permissions of '/etc/rspamd/local.d':
+    #   Read-only file system
+    #
+    # which took rspamd down with it (requiredBy, correctly, refuses to
+    # start rspamd without its password). Nothing may be created under /etc
+    # at runtime here; only the Nix-managed symlinks that are already there
+    # at activation. `locals."redis.conf"` pulls this path in with a UCL
+    # .include instead -- see below.
+    #
+    # 0644, not 0600: rspamd.service runs with PrivateUsers=true, so the
+    # root that writes this file maps to `nobody` inside the service's user
+    # namespace. World-readable is what makes it readable there at all, and
+    # it is no weaker than the bind-mounted secret it is derived from.
+    #
+    # No ConditionPathExists: a skipped unit counts as satisfied, so rspamd
+    # would start anyway and fail to authenticate to Redis with a far less
+    # obvious error.
     systemd.services.rspamd-redis-password = mkIf (cfg.redis.password-file
       != null) {
       description = "Assemble rspamd's Redis password from its runtime secret.";
@@ -132,11 +159,11 @@ in {
         ExecStart = pkgs.writeShellScript "rspamd-redis-password" ''
           set -euo pipefail
           umask 077
-          install -d -m 0755 /etc/rspamd/local.d
+          install -d -m 0755 ${redisPasswordDir}
           PASSWORD="$(cat ${escapeShellArg cfg.redis.password-file})"
           printf 'password = "%s";\n' "$PASSWORD" \
-            > /etc/rspamd/local.d/redis-password.conf
-          chmod 0644 /etc/rspamd/local.d/redis-password.conf
+            > ${redisPasswordFile}
+          chmod 0644 ${redisPasswordFile}
         '';
       };
     };
@@ -181,23 +208,39 @@ in {
           });
 
         locals = {
-          # Add detailed spam headers to help with debugging and filtering
-          # Headers include scores, symbols matched, and individual test results
-          "milter_headers.conf".text = "extended_spam_headers = yes;";
+          # Add detailed spam headers to help with debugging and filtering.
+          # Headers include scores, symbols matched, and individual results.
+          #
+          # skip_authenticated/skip_local keep them off mail this server
+          # SENDS: submission runs through the same milter, so without
+          # these every outgoing message carried X-Spamd-Result with the
+          # internal symbol names and scores -- and the DKIM milter, which
+          # runs after rspamd, then signed them.
+          "milter_headers.conf".text = ''
+            extended_spam_headers = true;
+            skip_authenticated = true;
+            skip_local = true;
+          '';
 
           # Redis for Bayes statistics, neural network, and reputation data.
           # Redis provides fast, persistent storage for learning and scoring.
           #
-          # The password is deliberately NOT set here when password-file is
-          # used: rspamd merges every file under local.d/ at its own
-          # start-up, and systemd.services.rspamd-redis-password (below)
-          # writes a second one, redis-password.conf, from the runtime
-          # secret when it's actually available -- not baked into this
-          # Nix-store-embedded file at eval time.
+          # The password is deliberately NOT written into this file when
+          # password-file is used. systemd.services.rspamd-redis-password
+          # (above) assembles it under /run at start-up from the runtime
+          # secret, and the .include below pulls it in here -- so the value
+          # never passes through the Nix store.
+          #
+          # try=true so a missing file is not a UCL parse error: if the
+          # assembly unit failed, `requiredBy` has already stopped rspamd
+          # from starting, and this way `rspamadm configtest` still works
+          # standalone.
           "redis.conf".text = ''
             servers = "${cfg.redis.host}:${toString cfg.redis.port}";
           '' + optionalString (cfg.redis.password != null) ''
             password = "${cfg.redis.password}";
+          '' + optionalString (cfg.redis.password-file != null) ''
+            .include(try=true) "${redisPasswordFile}"
           '';
 
           # ClamAV integration for virus scanning
@@ -252,13 +295,18 @@ in {
             # Enable DMARC checking
             enabled = true;
 
-            # Report to domain owners (aggregate reports)
-            reporting = {
-              enabled = true;
-              email = "postmaster@localhost";
-              # org_name = "Your Organization";
-              # domain = "example.com";
-            };
+            # Aggregate reporting to domain owners: OFF, honestly.
+            #
+            # This was `enabled = true` with email = postmaster@localhost
+            # and no org_name -- which sent nothing regardless, because
+            # rspamd only emits aggregate reports when the
+            # rspamd_dmarc_report tool is run on a schedule, and there is
+            # no such timer here. Turning it on for real means a real
+            # org_name/domain/email plus a systemd timer running
+            # `rspamd_dmarc_report`; until then, saying false is accurate.
+            reporting {
+              enabled = false;
+            }
 
             # Actions based on DMARC policy
             # These override the domain's policy for testing
@@ -303,21 +351,12 @@ in {
             }
           '';
 
-          "metrics_exporter.conf".text = ''
-            backend = "graphite";
-            metrics = [
-              "actions.add header",
-              "actions.greylist",
-              "actions.reject",
-              "actions.rewrite subject",
-              "actions.soft reject",
-              "connections",
-              "ham_count",
-              "spam_count",
-              "learned",
-              "scanned",
-            ];
-          '';
+          # A "metrics_exporter.conf" pointing rspamd's graphite backend at
+          # a graphite server that does not exist used to sit here. Dead
+          # since metrics moved to the controller's native /metrics
+          # endpoint (see the comment above `rspamd =`); all it did was
+          # make rspamd periodically try to export somewhere.
+
 
           # SURBL/URIBL: DNS-based blacklists for URLs in email
           # Checks all URLs (including those in email addresses and DKIM signatures)
@@ -429,7 +468,9 @@ in {
           '';
         };
 
-        overrides."milter_headers.conf".text = "extended_spam_headers = true;";
+        # `overrides."milter_headers.conf"` used to sit here restating
+        # extended_spam_headers with the other boolean spelling. It won,
+        # being an override, so the local above was dead. Said once now.
 
         # Worker processes for handling different types of requests
         workers = {
@@ -452,10 +493,14 @@ in {
           };
 
           # Controller worker: Provides web UI and API for management
-          # Used for training, statistics viewing, and configuration
+          # Used for training, statistics viewing, and configuration.
+          # One process: this is the endpoint that WRITES -- learn requests
+          # from the Sieve pipes, statistics, the /metrics scrape -- and
+          # fanning that across four workers buys nothing while making
+          # concurrent Bayes updates race each other.
           controller = {
             type = "controller";
-            count = 4;
+            count = 1;
             bindSockets = [ "*:${toString cfg.ports.controller}" ];
             includes = [ ];
           };

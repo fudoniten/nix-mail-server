@@ -527,6 +527,13 @@ in {
       "d ${cfg.state-directory}/antivirus          0700 - - - -"
       "d ${cfg.state-directory}/dkim               0700 - - - -"
       "d ${cfg.state-directory}/mail               0700 - - - -"
+      # Both of these were relying on the container runtime auto-creating
+      # the bind-mount source; declared here instead so ownership and mode
+      # are deterministic. Root-owned like the rest -- the containers chown
+      # their own mountpoints (systemd StateDirectory= for redis,
+      # postfix-setup for postfix), the same way the mail directory works.
+      "d ${cfg.state-directory}/redis              0700 - - - -"
+      "d ${cfg.state-directory}/postfix            0700 - - - -"
       # Secret directories for container mounts. assembleMailSecrets
       # writes directly to these -- nothing left here needs a "C+" copy
       # rule the way the legacy host-secrets pipeline used.
@@ -626,6 +633,13 @@ in {
                 "${dovecotLdapConfigPath}:/run/dovecot2/conf.d/ldap.conf:ro"
                 "${postfixLdapRecipientsPath}:/run/mail-server/ldap-recipients.cf:ro"
                 "${cfg.smtp.ssl-directory}:/run/certs/smtp"
+                # The mail queue. Without this it lives in the container's
+                # writable layer, and postfix-setup recreates
+                # queue/{pid,public,maildrop} from scratch on every start --
+                # so deferred and in-flight mail was silently discarded
+                # whenever the container was recreated, which is most
+                # rebuilds. No bounce, no log line naming what was lost.
+                "${cfg.state-directory}/postfix:/var/lib/postfix"
               ];
               ports = [ "25:25" "587:587" "465:465" ];
               depends_on = [ "imap" "ldap-proxy" ];
@@ -633,7 +647,11 @@ in {
             nixos = {
               useSystemd = true;
               configuration = {
-                imports = [ ./dovecot.nix ./postfix.nix ];
+                # postfix.nix only -- it configures services.dovecot2
+                # directly for SASL and never touches fudo.mail.dovecot, so
+                # importing dovecot.nix here added an options tree nothing
+                # in this container sets.
+                imports = [ ./postfix.nix ];
 
                 boot.tmp.useTmpfs = true;
                 system.nssModules = lib.mkForce [ ];
@@ -848,7 +866,10 @@ in {
                   enable = true;
                   debug = cfg.debug;
                   port = dkimPort;
-                  state-directory = "/state";
+                  # No state-directory: the option is gone, because nothing
+                  # ever read it. Keys live at /var/lib/opendkim, which is
+                  # what the volume above mounts -- "/state" here was
+                  # inert and contradicted that mount.
                   domains = [ cfg.primary-domain ] ++ cfg.extra-domains;
                 };
               };
@@ -857,7 +878,15 @@ in {
           redis = {
             service = {
               volumes = [
-                "${cfg.state-directory}/redis:/var/lib/redis"
+                # /var/lib/redis-rspamd, not /var/lib/redis: the NixOS redis
+                # module derives its data directory from the server NAME --
+                # `services.redis.servers."rspamd"` gets StateDirectory=
+                # redis-rspamd. Mounting /var/lib/redis meant nothing was
+                # ever written to the mount, and every Bayes corpus, neural
+                # model, reputation score and fuzzy hash lived in the
+                # container's ephemeral layer until the next rebuild threw
+                # it away. Keep the two in sync if the server is renamed.
+                "${cfg.state-directory}/redis:/var/lib/redis-rspamd"
                 "${redisPasswdPath}:/run/redis/passwd:ro"
               ];
               networks = [ "redis_network" ];

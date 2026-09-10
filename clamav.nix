@@ -34,21 +34,13 @@ in {
   };
 
   config = mkIf cfg.enable {
-    # Create dedicated clamav user and group for daemon isolation
-    # Uses standard NixOS IDs for consistency across deployments
-    users = {
-      users.clamav = {
-        isSystemUser = true;
-        uid = config.ids.uids.clamav;
-        home = mkForce cfg.state-directory;
-        description = "ClamAV daemon user";
-        group = "clamav";
-      };
-      groups.clamav = {
-        members = [ "clamav" ];
-        gid = config.ids.gids.clamav;
-      };
-    };
+    # nixpkgs' clamav module already declares this user and group, with the
+    # same uid/gid out of config.ids, the same description, and group
+    # membership -- all of which this module used to restate verbatim. The
+    # home directory is the one part that is genuinely ours: the module
+    # points it at its own /var/lib/clamav, and this deployment moves the
+    # database to state-directory (/state in the container).
+    users.users.clamav.home = mkForce cfg.state-directory;
 
     # Ensure state directory exists with correct permissions
     # 0750 = owner rwx, group r-x, others none
@@ -63,11 +55,13 @@ in {
           # better URL reputation and analysis capabilities
           PhishingScanURLs = "no";
 
-          # Custom database location for easier backups and management
+          # Custom database location for easier backups and management.
+          # mkForce because the module sets this to /var/lib/clamav
+          # outright, not with mkDefault.
           DatabaseDirectory = mkForce cfg.state-directory;
 
-          # Run as dedicated clamav user for security isolation
-          User = mkForce "clamav";
+          # `User = "clamav"` was here too, restating what the module
+          # already sets to exactly that value.
 
           # TCP socket for integration with Rspamd
           # Unix sockets would be more secure but harder to containerize
