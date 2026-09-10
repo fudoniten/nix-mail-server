@@ -24,7 +24,15 @@
 # TODO: Add support for custom DNS blacklists configuration
 
 with lib;
-let cfg = config.fudo.mail.rspamd;
+let
+  cfg = config.fudo.mail.rspamd;
+
+  # Where the assembled Redis password lands at run time, and the UCL
+  # include that pulls it into the redis section. Written once here
+  # because the unit that creates the file and the config that reads it
+  # have to agree, and they are ~300 lines apart.
+  redisPasswordDir = "/run/rspamd-secrets";
+  redisPasswordFile = "${redisPasswordDir}/redis-password.conf";
 
 in {
   options.fudo.mail.rspamd = with types; {
@@ -112,14 +120,33 @@ in {
       '';
     }];
 
-    # rspamd merges every file under local.d/ (which is what `locals`
-    # writes into) at its own start-up, so the password can be handed to
-    # it as a SEPARATE file from the one `locals."redis.conf"` manages --
-    # written by a plain systemd unit that reads the runtime path when the
-    # service actually starts, rather than baked into the Nix-managed
-    # config file at eval time the way it used to be. No ConditionPathExists:
-    # a skipped unit counts as satisfied, so rspamd would start anyway and
-    # fail to authenticate to Redis with a far less obvious error.
+    # The password is handed to rspamd as a SEPARATE file from the one
+    # `locals."redis.conf"` manages, written by a plain systemd unit that
+    # reads the runtime path when the service actually starts rather than
+    # baked into the Nix-managed config at eval time.
+    #
+    # It goes in /run, NOT /etc/rspamd/local.d, even though local.d is
+    # where rspamd merges config from and where this used to write. Inside
+    # an Arion/NixOS container /etc is a read-only overlay, so `install -d`
+    # there fails outright:
+    #
+    #   install: cannot change permissions of '/etc/rspamd/local.d':
+    #   Read-only file system
+    #
+    # which took rspamd down with it (requiredBy, correctly, refuses to
+    # start rspamd without its password). Nothing may be created under /etc
+    # at runtime here; only the Nix-managed symlinks that are already there
+    # at activation. `locals."redis.conf"` pulls this path in with a UCL
+    # .include instead -- see below.
+    #
+    # 0644, not 0600: rspamd.service runs with PrivateUsers=true, so the
+    # root that writes this file maps to `nobody` inside the service's user
+    # namespace. World-readable is what makes it readable there at all, and
+    # it is no weaker than the bind-mounted secret it is derived from.
+    #
+    # No ConditionPathExists: a skipped unit counts as satisfied, so rspamd
+    # would start anyway and fail to authenticate to Redis with a far less
+    # obvious error.
     systemd.services.rspamd-redis-password = mkIf (cfg.redis.password-file
       != null) {
       description = "Assemble rspamd's Redis password from its runtime secret.";
@@ -132,11 +159,11 @@ in {
         ExecStart = pkgs.writeShellScript "rspamd-redis-password" ''
           set -euo pipefail
           umask 077
-          install -d -m 0755 /etc/rspamd/local.d
+          install -d -m 0755 ${redisPasswordDir}
           PASSWORD="$(cat ${escapeShellArg cfg.redis.password-file})"
           printf 'password = "%s";\n' "$PASSWORD" \
-            > /etc/rspamd/local.d/redis-password.conf
-          chmod 0644 /etc/rspamd/local.d/redis-password.conf
+            > ${redisPasswordFile}
+          chmod 0644 ${redisPasswordFile}
         '';
       };
     };
@@ -198,16 +225,22 @@ in {
           # Redis for Bayes statistics, neural network, and reputation data.
           # Redis provides fast, persistent storage for learning and scoring.
           #
-          # The password is deliberately NOT set here when password-file is
-          # used: rspamd merges every file under local.d/ at its own
-          # start-up, and systemd.services.rspamd-redis-password (below)
-          # writes a second one, redis-password.conf, from the runtime
-          # secret when it's actually available -- not baked into this
-          # Nix-store-embedded file at eval time.
+          # The password is deliberately NOT written into this file when
+          # password-file is used. systemd.services.rspamd-redis-password
+          # (above) assembles it under /run at start-up from the runtime
+          # secret, and the .include below pulls it in here -- so the value
+          # never passes through the Nix store.
+          #
+          # try=true so a missing file is not a UCL parse error: if the
+          # assembly unit failed, `requiredBy` has already stopped rspamd
+          # from starting, and this way `rspamadm configtest` still works
+          # standalone.
           "redis.conf".text = ''
             servers = "${cfg.redis.host}:${toString cfg.redis.port}";
           '' + optionalString (cfg.redis.password != null) ''
             password = "${cfg.redis.password}";
+          '' + optionalString (cfg.redis.password-file != null) ''
+            .include(try=true) "${redisPasswordFile}"
           '';
 
           # ClamAV integration for virus scanning
