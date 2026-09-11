@@ -277,10 +277,16 @@ in {
         settings = {
           # This instance authenticates; it stores nothing, so it serves no
           # protocols at all -- only `service auth`, which is what Postfix
-          # talks to over /run/dovecot2/auth. An empty list renders as a
-          # literal `protocols = ` line (the module emits empty lists
-          # rather than dropping them), which is Dovecot's documented
+          # talks to over /run/dovecot2/auth. That is Dovecot's documented
           # auth-only configuration.
+          #
+          # The EMPTY STRING, not an empty list. The module's value type is
+          #   nullOr (oneOf [ primitiveType (nonEmptyListOf primitiveType) ])
+          # so `[ ]` is rejected outright -- "not of type `Dovecot config
+          # value'" -- however well the renderer would have coped with it.
+          # A str is a primitiveType, and `toOption` emits `n = v`
+          # verbatim, so "" produces exactly the bare `protocols = ` line
+          # that is wanted here. Don't "fix" this back into a list.
           #
           # It used to say `protocols = imap`, inherited from the pre-26.05
           # module's enableImap default, which stood up a real IMAP
@@ -288,7 +294,7 @@ in {
           # published it outside the container, but nothing needed it
           # either. `ssl`/`disable_plaintext_auth` stay as they are: left
           # unsaid, Dovecot 2.3 defaults ssl to yes with no cert to serve.
-          protocols = [ ];
+          protocols = "";
           ssl = "no";
           disable_plaintext_auth = false;
 
