@@ -910,7 +910,9 @@ in {
           metrics-proxy = {
             service = {
               networks = [ "internal_network" "external_network" ];
-              ports = [ "${toString cfg.metrics-port}:80" ];
+              # Loopback only: the host's nginx proxies the *-stats vhosts to
+              # it, and a podman-published port bypasses the host firewall.
+              ports = [ "127.0.0.1:${toString cfg.metrics-port}:80" ];
               depends_on = [ "smtp" "imap" "antispam" ];
               capabilities.SYS_ADMIN = true;
             };
