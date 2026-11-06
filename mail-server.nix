@@ -42,10 +42,9 @@
 # - Each service runs in isolated container with minimal capabilities
 # - Secrets requiring external coordination (LDAP bind password, Authentik
 #   outpost token) come from a runtime secrets store, read at start-up.
-#   Internal-only secrets (Dovecot's admin password, the Redis password
-#   this module and rspamd.nix share) still default to a value derived
-#   from build-seed and embedded in the Nix store, but can be pointed at a
-#   runtime secrets store too via the internal-secrets.*-file options.
+#   So do the internal-only ones (Dovecot's admin password and API key, the
+#   Redis password this module and rspamd.nix share), via the
+#   internal-secrets.*-file options, which are required.
 # - TLS required for all client connections (submission/IMAP)
 # - SASL authentication via LDAP
 # - Multi-layer spam/abuse prevention
@@ -55,37 +54,13 @@ with lib;
 let
   cfg = config.fudo.mail;
 
-  # Three internal-only secrets: nothing outside this module (and, for the
-  # Redis password, rspamd.nix) ever needs to agree on their value, so
-  # unlike the LDAP secrets above they default to one generated
-  # deterministically from build-seed rather than requiring a caller to
-  # supply one. Each internal-secrets.*-file option lets a caller point at
-  # a runtime secrets store instead; when it does, that path is what gets
-  # `cat`'d below, in place of the build-seed-derived store path. Either
-  # way the *value* is only ever read at start-up now, never baked into
-  # one of the generated config files at eval time -- a Nix store path is
-  # just as readable by `cat` at boot as a runtime-only one is, so there's
-  # no reason for the two cases to take different code paths.
-  dovecotAdminPasswdPath = toString
-    (if cfg.internal-secrets.dovecot-admin-password-file != null then
-      cfg.internal-secrets.dovecot-admin-password-file
-    else
-      pkgs.lib.passwd.stablerandom-passwd-file "dovecot-admin-passwd"
-      config.instance.build-seed);
-
-  dovecotApiKeyPath = toString
-    (if cfg.internal-secrets.dovecot-api-key-file != null then
-      cfg.internal-secrets.dovecot-api-key-file
-    else
-      pkgs.lib.passwd.stablerandom-passwd-file "dovecot-api-key"
-      config.instance.build-seed);
-
-  redisPasswdPath = toString (if cfg.internal-secrets.redis-password-file
-    != null then
-    cfg.internal-secrets.redis-password-file
-  else
-    pkgs.lib.passwd.stablerandom-passwd-file "mail-server-redis-passwd"
-    config.instance.build-seed);
+  # Three internal-only secrets, read with `cat` at start-up and never at
+  # eval time. They used to default to a password derived from
+  # `instance.build-seed` and baked into the Nix store; that fallback is gone,
+  # and the assertions below require the caller to supply each one.
+  dovecotAdminPasswdPath = cfg.internal-secrets.dovecot-admin-password-file;
+  dovecotApiKeyPath = cfg.internal-secrets.dovecot-api-key-file;
+  redisPasswdPath = cfg.internal-secrets.redis-password-file;
 
   # Runtime paths for the four files below, shared between the assembly
   # script and the arion container mounts that read them -- so the path
@@ -414,11 +389,8 @@ in {
         default = null;
         description = ''
           Runtime path to Dovecot's doveadm admin password, read at
-          start-up. Nothing outside this module needs to agree on this
-          value, so when left null (the default) one is generated
-          deterministically from build-seed instead -- fine for a value
-          nothing external reads, but not a real secret at rest. Set this
-          to use a real secrets store (Aegis, etc.) instead.
+          start-up. Required: there is no build-seed-derived default any
+          more. Point it at a runtime secrets store (Aegis, etc.).
         '';
       };
 
@@ -427,7 +399,7 @@ in {
         default = null;
         description = ''
           Same as dovecot-admin-password-file, for doveadm's HTTP API key.
-          Only read when imap.api-port is set.
+          Only read, and only required, when imap.api-port is set.
         '';
       };
 
@@ -437,8 +409,8 @@ in {
         description = ''
           Runtime path to the password securing this mail server's
           internal Redis instance (shared by rspamd's statistics/fuzzy-hash
-          storage and Dovecot), read at start-up. Left null by default for
-          the same reason as dovecot-admin-password-file.
+          storage and Dovecot), read at start-up. Required, like
+          dovecot-admin-password-file.
         '';
       };
     };
@@ -505,7 +477,14 @@ in {
         Setting both would leave it ambiguous which one actually reaches
         the LDAP proxy; setting neither leaves it with no token at all.
       '';
-    }];
+    }] ++ map (name: {
+      assertion = cfg.internal-secrets.${name} != null;
+      message = ''
+        fudo.mail.internal-secrets.${name} must be set to a runtime path
+        (e.g. one placed by Aegis). The build-seed-derived default is gone.
+      '';
+    }) ([ "dovecot-admin-password-file" "redis-password-file" ]
+      ++ optional (cfg.imap.api-port != null) "dovecot-api-key-file");
 
     # mailLdapProxyEnv, dovecotLdapConfig, postfixLdapRecipients,
     # dovecotAdminConfig and redisPasswd all used to live here (or, for
@@ -793,8 +772,7 @@ in {
               depends_on = [ "antivirus" "redis" ];
               # Gives rspamd.nix's own boot-time assembly (redis.password-file,
               # read inside the container) something to read -- the container
-              # sees it at this path regardless of whether redisPasswdPath is
-              # a build-seed store path or an Aegis runtime one on the host.
+              # sees it at this path wherever redisPasswdPath is on the host.
               volumes = [ "${redisPasswdPath}:/run/redis-client/passwd:ro" ];
             };
             nixos = {

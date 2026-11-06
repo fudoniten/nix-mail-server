@@ -24,11 +24,11 @@
 paths, assembled at start-up by the `mail-secrets` unit rather than baked in at
 eval time: `ldap.bind-password-file` and `ldap.outpost-token-file`.
 
-**Still open**: the three internal secrets -- the Dovecot admin password, the
-Dovecot doveadm API key, and the Redis password shared with rspamd -- still
-default to a value derived deterministically from `build-seed` and stored in the
-world-readable Nix store. Each has an `internal-secrets.*-file` option; setting
-all three to paths from a real secrets store closes this completely.
+**Closed (2026-11-06)**: the three internal secrets -- the Dovecot admin
+password, the Dovecot doveadm API key, and the Redis password shared with
+rspamd -- no longer fall back to a `build-seed`-derived store path. Their
+`internal-secrets.*-file` options are required (the API key only when
+`imap.api-port` is set).
 
 The original problem, for reference:
 
@@ -756,7 +756,7 @@ Ordered by what would most improve the deployment, not by item number.
 
 | # | Item | Status | Note |
 | --- | --- | --- | --- |
-| 1 | Secrets management | PARTIAL | LDAP bind password and outpost token are read at runtime. The three `internal-secrets.*` still default to build-seed derivation in the Nix store; set the `*-file` options to close it. |
+| 1 | Secrets management | DONE | LDAP bind password, outpost token and the three `internal-secrets.*` are all runtime paths; no build-seed fallback. |
 | 3 | DMARC support | DONE | Checking is on. Aggregate *reporting* is deliberately off — it needs a real org_name and a `rspamd_dmarc_report` timer. |
 | 7 | Rate limiting | DONE | Now on the submission listeners only; applying them in main.cf throttled inbound mail from busy peers. |
 | 9 | Recipient validation | DONE | LDAP recipient maps. |
