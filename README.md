@@ -152,14 +152,11 @@ also provide:
 - **`virtualisation.arion.backend`** - `"docker"` or `"podman-socket"`. Arion
   declares this with no default, so leaving it unset fails evaluation with
   *"The option `virtualisation.arion.backend' is used but not defined"*.
-- **`config.instance.build-seed`** - a fudo-lib provision, used to derive the
-  internal passwords (Dovecot admin, Dovecot API key, Redis) when the
-  corresponding `internal-secrets.*-file` option is left null.
-- **`pkgs.lib.passwd.stablerandom-passwd-file`** - likewise from fudo-lib, and
-  likewise only needed when those options are null.
-
-Set all three `internal-secrets.*-file` options and `build-seed` is no longer
-consulted, but the overlay providing `pkgs.lib.passwd` still has to be present.
+- **`internal-secrets.dovecot-admin-password-file`** and
+  **`internal-secrets.redis-password-file`** (plus
+  **`internal-secrets.dovecot-api-key-file`** when `imap.api-port` is set) -
+  runtime paths, e.g. from Aegis. They used to default to passwords derived
+  from fudo-lib's `build-seed`; that fallback is gone.
 
 ### Required options
 
@@ -504,12 +501,9 @@ swaks --to user@example.com \
    traffic bypasses. `fail2ban-client status postfix-sasl` showing zero matches
    over a period when the logs show failed logins confirms it.
 
-3. **Internal secrets default to build-seed derivation.** The Dovecot admin
-   password, Dovecot API key and Redis password are, by default, derived
-   deterministically from `build-seed` and land in the world-readable Nix store.
-   The LDAP bind password and Authentik outpost token are read at runtime and
-   never do. Point the three `internal-secrets.*-file` options at a real secrets
-   store to close this.
+3. **(Resolved.)** The internal secrets used to default to build-seed-derived
+   passwords in the world-readable Nix store. They are now required runtime
+   paths, read at start-up like the LDAP bind password and outpost token.
 
 4. **The Rspamd controller has no password.** It is not published to the host,
    so this only matters to anything else on the container networks.
