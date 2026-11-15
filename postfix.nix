@@ -200,6 +200,16 @@ in {
       description = "Path to LDAP dovecot2 configuration.";
     };
 
+    oauth2-conf = mkOption {
+      type = nullOr str;
+      default = null;
+      description = ''
+        Path to a Dovecot oauth2 passdb args file for the SASL-only Dovecot.
+        When set, submission also accepts XOAUTH2 / OAUTHBEARER tokens, and
+        the LDAP passdb is limited to PLAIN and LOGIN.
+      '';
+    };
+
     ldap-recipient-maps = mkOption {
       type = nullOr str;
       description =
@@ -298,6 +308,11 @@ in {
           ssl = "no";
           disable_plaintext_auth = false;
 
+          # Only when OAuth2 is configured; otherwise the module default
+          # (plain login) stands, as before.
+          auth_mechanisms = mkIf (cfg.oauth2-conf != null)
+            [ "plain" "login" "xoauth2" "oauthbearer" ];
+
           # Also emitted unconditionally by the old module: auth needs root to
           # read the LDAP configuration.
           service = [{
@@ -314,8 +329,16 @@ in {
             # When looking up usernames, just use the name, not the full address
             auth_username_format = %n
 
+            ${optionalString (cfg.oauth2-conf != null) ''
+              passdb {
+                driver = oauth2
+                mechanisms = xoauth2 oauthbearer
+                args = ${cfg.oauth2-conf}
+              }
+            ''}
             passdb {
               driver = ldap
+              ${optionalString (cfg.oauth2-conf != null) "mechanisms = plain login"}
               args = ${cfg.ldap-conf}
             }
 

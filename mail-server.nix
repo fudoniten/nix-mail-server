@@ -70,6 +70,20 @@ let
   dovecotAdminConfigPath = "/run/mail-server/dovecot-secrets/admin.conf";
   postfixLdapRecipientsPath =
     "/run/mail-server/postfix-secrets/ldap-recipients.cf";
+  dovecotOauth2ConfigPath = "/run/mail-server/dovecot-secrets/oauth2.conf.ext";
+
+  # In-container path of the oauth2 passdb args file, in both the imap and
+  # smtp containers. null when OAuth2 is off, which leaves both Dovecot
+  # configs exactly as they were.
+  oauth2ConfInContainer =
+    if cfg.oauth2.enable then "/run/dovecot2/conf.d/oauth2.conf.ext" else null;
+  oauth2Volumes = optional cfg.oauth2.enable
+    "${dovecotOauth2ConfigPath}:/run/dovecot2/conf.d/oauth2.conf.ext:ro";
+
+  # "https://host/path" -> [ "https" "host/path" ], so the client
+  # credentials can be spliced in as URL userinfo at start-up.
+  introspectionUrlParts =
+    builtins.match "(https?)://(.+)" cfg.oauth2.introspection-url;
 
   # These four files each need a secret inline, and until now got it via
   # `pkgs.writeText` + `readFile cfg.ldap.bind-password-file` (or
@@ -103,6 +117,15 @@ let
     ADMIN_PW="$(cat ${escapeShellArg dovecotAdminPasswdPath})"
     ${optionalString (cfg.imap.api-port != null) ''
       API_KEY="$(cat ${escapeShellArg dovecotApiKeyPath})"
+    ''}
+    ${optionalString cfg.oauth2.enable ''
+      # URL-encoded: these go into the introspection URL as userinfo.
+      OAUTH_ID="$(${pkgs.jq}/bin/jq -rn --arg s ${
+        escapeShellArg cfg.oauth2.client-id
+      } '$s|@uri')"
+      OAUTH_SECRET="$(${pkgs.jq}/bin/jq -rn \
+        --arg s "$(cat ${escapeShellArg cfg.oauth2.client-secret-file})" \
+        '$s|@uri')"
     ''}
 
     install -d -m 0755 "$(dirname ${escapeShellArg ldapProxyEnvPath})"
@@ -149,6 +172,25 @@ let
     result_format = OK
     EOF
     chmod 0644 ${escapeShellArg postfixLdapRecipientsPath}
+
+    ${optionalString cfg.oauth2.enable ''
+      # Dovecot oauth2 passdb: validate bearer tokens by POSTing them to
+      # the IdP's RFC 7662 introspection endpoint, authenticating as the
+      # webmail's OAuth client. 0600, unlike its neighbours: it is read
+      # only by Dovecot's auth process, which runs as root in both
+      # containers, and it carries the client secret.
+      cat > ${escapeShellArg dovecotOauth2ConfigPath} <<EOF
+      introspection_mode = post
+      introspection_url = ${elemAt introspectionUrlParts 0}://$OAUTH_ID:$OAUTH_SECRET@${
+        elemAt introspectionUrlParts 1
+      }
+      username_attribute = ${cfg.oauth2.username-attribute}
+      active_attribute = active
+      active_value = true
+      tls_ca_cert_file = /etc/ssl/certs/ca-certificates.crt
+      EOF
+      chmod 0600 ${escapeShellArg dovecotOauth2ConfigPath}
+    ''}
 
     cat > ${escapeShellArg dovecotAdminConfigPath} <<EOF
     doveadm_password = $ADMIN_PW
@@ -383,6 +425,53 @@ in {
       };
     };
 
+    oauth2 = {
+      enable = mkEnableOption ''
+        OAuth2 bearer-token logins (XOAUTH2 / OAUTHBEARER) on IMAP and
+        submission, for webmail single sign-on. Tokens are checked against
+        the identity provider's introspection endpoint. Password logins
+        through LDAP keep working exactly as before'';
+
+      introspection-url = mkOption {
+        type = str;
+        default = "";
+        example = "https://authentik.example.com/application/o/introspect/";
+        description = ''
+          The IdP's RFC 7662 token introspection endpoint. For Authentik
+          this is https://<host>/application/o/introspect/.
+        '';
+      };
+
+      client-id = mkOption {
+        type = str;
+        default = "";
+        description = ''
+          OAuth client ID Dovecot authenticates as when introspecting
+          tokens. Authentik only introspects tokens issued to the calling
+          client, so this is the webmail's own client.
+        '';
+      };
+
+      client-secret-file = mkOption {
+        type = nullOr str;
+        default = null;
+        description = ''
+          Runtime path to that client's secret, read at start-up (Aegis,
+          etc.), like ldap.bind-password-file.
+        '';
+      };
+
+      username-attribute = mkOption {
+        type = str;
+        default = "preferred_username";
+        description = ''
+          Field of the introspection response holding the login name. It
+          must match the name the webmail logs in with (after the domain
+          is stripped), i.e. the LDAP cn.
+        '';
+      };
+    };
+
     internal-secrets = {
       dovecot-admin-password-file = mkOption {
         type = nullOr str;
@@ -477,7 +566,21 @@ in {
         Setting both would leave it ambiguous which one actually reaches
         the LDAP proxy; setting neither leaves it with no token at all.
       '';
-    }] ++ map (name: {
+    }] ++ optionals cfg.oauth2.enable [
+      {
+        assertion = cfg.oauth2.client-secret-file != null
+          && cfg.oauth2.client-id != "";
+        message =
+          "fudo.mail.oauth2: client-id and client-secret-file must be set.";
+      }
+      {
+        assertion = introspectionUrlParts != null;
+        message = ''
+          fudo.mail.oauth2.introspection-url must be an http(s) URL, got
+          "${cfg.oauth2.introspection-url}".
+        '';
+      }
+    ] ++ map (name: {
       assertion = cfg.internal-secrets.${name} != null;
       message = ''
         fudo.mail.internal-secrets.${name} must be set to a runtime path
@@ -619,7 +722,7 @@ in {
                 # whenever the container was recreated, which is most
                 # rebuilds. No bounce, no log line naming what was lost.
                 "${cfg.state-directory}/postfix:/var/lib/postfix"
-              ];
+              ] ++ oauth2Volumes;
               ports = [ "25:25" "587:587" "465:465" ];
               depends_on = [ "imap" "ldap-proxy" ];
             };
@@ -686,6 +789,7 @@ in {
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   ldap-recipient-maps = "/run/mail-server/ldap-recipients.cf";
+                  oauth2-conf = oauth2ConfInContainer;
                 };
               };
             };
@@ -707,7 +811,7 @@ in {
                 "${cfg.imap.ssl-directory}:/run/certs/imap:ro"
                 "${cfg.state-directory}/dovecot-dhparams:/var/lib/dhparams"
                 "${cfg.state-directory}/mail:/mail"
-              ];
+              ] ++ oauth2Volumes;
               depends_on = [ "antispam" "ldap-proxy" ];
             };
             nixos = {
@@ -740,6 +844,7 @@ in {
                   };
                   ldap-conf = "/run/dovecot2/conf.d/ldap.conf";
                   admin-conf = "/run/dovecot2/conf.d/admin.conf";
+                  oauth2-conf = oauth2ConfInContainer;
                   quota = {
                     enable = cfg.quota.enable;
                     limit = cfg.quota.limit;

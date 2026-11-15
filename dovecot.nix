@@ -258,6 +258,17 @@ in {
       type = str;
       description = "Path to admin dovecot2 configuration.";
     };
+
+    oauth2-conf = mkOption {
+      type = nullOr str;
+      default = null;
+      description = ''
+        Path to a Dovecot oauth2 passdb args file. When set, Dovecot also
+        accepts OAuth2 bearer tokens (XOAUTH2 / OAUTHBEARER), validated
+        against the identity provider, and the LDAP passdb is limited to
+        the PLAIN and LOGIN mechanisms. Password logins are unchanged.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -510,8 +521,19 @@ in {
             user = root
           }
 
+          ${optionalString (cfg.oauth2-conf != null) ''
+            # OAuth2 bearer tokens (webmail SSO). Scoped to the token
+            # mechanisms, so a password is never sent to the IdP and a
+            # token is never tried as an LDAP password.
+            passdb {
+              driver = oauth2
+              mechanisms = xoauth2 oauthbearer
+              args = ${cfg.oauth2-conf}
+            }
+          ''}
           passdb {
             driver = ldap
+            ${optionalString (cfg.oauth2-conf != null) "mechanisms = plain login"}
             args = ${cfg.ldap-conf}
           }
 
@@ -662,6 +684,12 @@ in {
           ssl_cert = "<${cfg.ssl.certificate}";
           ssl_key = "<${cfg.ssl.private-key}";
           disable_plaintext_auth = true;
+
+          # The module defaults this to plain + login. Adding the token
+          # mechanisms only when OAuth2 is configured keeps the non-OAuth
+          # config byte-identical to before.
+          auth_mechanisms = mkIf (cfg.oauth2-conf != null)
+            [ "plain" "login" "xoauth2" "oauthbearer" ];
 
           # Auth has to start as root to read the LDAP config and the static
           # userdb's uid; the pre-26.05 module emitted this unconditionally.
