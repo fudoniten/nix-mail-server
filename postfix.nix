@@ -579,10 +579,15 @@ in {
           smtp_tls_chain_files = [ cfg.ssl.private-key cfg.ssl.certificate ];
 
           virtual_mailbox_domains = allDomains;
+          # With LDAP recipient maps, LDAP ALONE decides which mailboxes
+          # exist. The hash map is a per-domain catch-all (`@domain OK`),
+          # and it used to be listed after the LDAP map -- so any address
+          # LDAP rejected fell through to the catch-all and was accepted,
+          # which meant recipient validation never rejected anything.
+          # Aliases still validate, via virtual_alias_maps
+          # (smtpd_reject_unlisted_recipient checks both).
           virtual_mailbox_maps = if cfg.ldap-recipient-maps != null then
-            "ldap:${cfg.ldap-recipient-maps}, ${
-              mappedFile "virtual_mailbox_map"
-            }"
+            "ldap:${cfg.ldap-recipient-maps}"
           else
             mappedFile "virtual_mailbox_map";
 
@@ -614,12 +619,17 @@ in {
           # DNS resolution order for remote hosts
           smtp_host_lookup = "dns, native";
 
-          # SASL AUTHENTICATION: Integrate with Dovecot for user auth
-          # Used for submission ports (587/465) to verify users before accepting mail
-          smtpd_sasl_type = "dovecot";
-          smtpd_sasl_path = "/run/dovecot2/auth"; # Unix socket to Dovecot
-          smtpd_sasl_auth_enable = "yes";
-          smtpd_sasl_local_domain = cfg.sasl-domain;
+          # SASL AUTHENTICATION lives on the submission listeners only
+          # (submission-options above sets smtpd_sasl_auth_enable, _type,
+          # _path and _local_domain for 587 and 465).
+          #
+          # It used to be enabled here in main.cf as well, which made port
+          # 25 advertise AUTH after STARTTLS. That gave password guessers a
+          # third port, and let anyone with valid credentials relay through
+          # 25 -- where none of the submission rate limits, the
+          # submission-header-cleanup service or the ORIGINATING milter
+          # macro apply. Port 25 is for inbound MX traffic; leave it off.
+          smtpd_sasl_auth_enable = "no";
           smtpd_sasl_authenticated_header = "yes"; # Add auth info to headers
 
           # Disable anonymous SASL mechanisms (require real credentials)
