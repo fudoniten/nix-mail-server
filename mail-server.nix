@@ -72,7 +72,7 @@ let
     "/run/mail-server/postfix-secrets/ldap-recipients.cf";
   dovecotOauth2ConfigPath = "/run/mail-server/dovecot-secrets/oauth2.conf.ext";
 
-  # In-container path of the oauth2 passdb args file, in both the imap and
+  # In-container path of the oauth2 settings file, in both the imap and
   # smtp containers. null when OAuth2 is off, which leaves both Dovecot
   # configs exactly as they were.
   oauth2ConfInContainer =
@@ -107,6 +107,13 @@ let
   assembleMailSecrets = pkgs.writeShellScript "mail-secrets-assembly" ''
     set -euo pipefail
     umask 077
+
+    # Quote a value for a Dovecot config file. Unquoted, a `#` starts a
+    # comment and leading/trailing spaces are dropped, so a secret holding
+    # either was silently truncated.
+    dovecot_quote() {
+      printf '"%s"' "$(printf '%s' "$1" | ${pkgs.gnused}/bin/sed 's/[\\"]/\\&/g')"
+    }
 
     ${if cfg.ldap.outpost-token-file != null then ''
       TOKEN="$(cat ${escapeShellArg cfg.ldap.outpost-token-file})"
@@ -143,18 +150,20 @@ let
     EOF
     chmod 0644 ${escapeShellArg ldapProxyEnvPath}
 
+    # Dovecot 2.4 settings, `!include`d inside `passdb ldap { }` by both
+    # Dovecot instances (IMAP and the SMTP container's SASL-only one).
+    # 2.4 dropped the old `args = <file>` format this used to be written in.
+    # A filter is required even though authentication binds straight to the
+    # user's DN: Dovecot refuses to start a lookup without one.
     cat > ${escapeShellArg dovecotLdapConfigPath} <<EOF
-    uris = ldap://ldap-proxy:3389
+    ldap_uris = ldap://ldap-proxy:3389
     ldap_version = 3
-    dn = ${cfg.ldap.bind-dn}
-    dnpass = $BIND_PW
-    auth_bind = yes
-    auth_bind_userdn = cn=%n,${cfg.ldap.user-ou},${cfg.ldap.base}
-    base = ${cfg.ldap.base}
-    user_filter = (&(objectClass=organizationalPerson)(cn=%n))
-    pass_filter = (&(objectClass=organizationalPerson)(cn=%n))
-    pass_attrs = =user=%{ldap:cn}
-    user_attrs = =user=%{ldap:cn}
+    ldap_auth_dn = ${cfg.ldap.bind-dn}
+    ldap_auth_dn_password = $(dovecot_quote "$BIND_PW")
+    ldap_base = ${cfg.ldap.base}
+    passdb_ldap_bind = yes
+    passdb_ldap_bind_userdn = cn=%{user | username},${cfg.ldap.user-ou},${cfg.ldap.base}
+    passdb_ldap_filter = (&(objectClass=organizationalPerson)(cn=%{user | username}))
     EOF
     chmod 0644 ${escapeShellArg dovecotLdapConfigPath}
 
@@ -179,23 +188,28 @@ let
       # webmail's OAuth client. 0600, unlike its neighbours: it is read
       # only by Dovecot's auth process, which runs as root in both
       # containers, and it carries the client secret.
+      #
+      # Dovecot 2.4 settings, `!include`d at the top level of both Dovecot
+      # configs (the oauth2 passdb does not see them from inside its own
+      # section). The client id and secret are URL-encoded above, so the
+      # URL holds nothing Dovecot's config parser treats specially.
       cat > ${escapeShellArg dovecotOauth2ConfigPath} <<EOF
-      introspection_mode = post
-      introspection_url = ${elemAt introspectionUrlParts 0}://$OAUTH_ID:$OAUTH_SECRET@${
+      oauth2_introspection_mode = post
+      oauth2_introspection_url = ${elemAt introspectionUrlParts 0}://$OAUTH_ID:$OAUTH_SECRET@${
         elemAt introspectionUrlParts 1
       }
-      username_attribute = ${cfg.oauth2.username-attribute}
-      active_attribute = active
-      active_value = true
-      tls_ca_cert_file = /etc/ssl/certs/ca-certificates.crt
+      oauth2_username_attribute = ${cfg.oauth2.username-attribute}
+      oauth2_active_attribute = active
+      oauth2_active_value = true
+      ssl_client_ca_file = /etc/ssl/certs/ca-certificates.crt
       EOF
       chmod 0600 ${escapeShellArg dovecotOauth2ConfigPath}
     ''}
 
     cat > ${escapeShellArg dovecotAdminConfigPath} <<EOF
-    doveadm_password = $ADMIN_PW
+    doveadm_password = $(dovecot_quote "$ADMIN_PW")
     ${optionalString (cfg.imap.api-port != null)
-      "doveadm_api_key = \$API_KEY"}
+      "doveadm_api_key = \$(dovecot_quote \"\$API_KEY\")"}
     EOF
     chmod 0644 ${escapeShellArg dovecotAdminConfigPath}
     '';

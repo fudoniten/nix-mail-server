@@ -43,10 +43,10 @@ let
 
   concatMapAttrsToList = f: as: concatLists (mapAttrsToList f as);
 
-  # This container runs a Dovecot purely as Postfix's SASL auth backend. Same
-  # 2.3 pin and same reason as dovecot.nix -- nixpkgs 26.05 defaults to Dovecot
-  # 2.4, whose configuration language this is not.
-  dovecotPkg = pkgs.dovecot_2_3;
+  # This container runs a Dovecot purely as Postfix's SASL auth backend.
+  # Named explicitly, as in dovecot.nix: the module's default picks 2.3 for
+  # any system whose stateVersion predates 26.05.
+  dovecotPkg = pkgs.dovecot;
 
   # `services.dovecot2.user` was dropped in the 26.05 module rewrite.
   dovecotUser = config.services.dovecot2.settings.default_internal_user;
@@ -197,15 +197,18 @@ in {
 
     ldap-conf = mkOption {
       type = str;
-      description = "Path to LDAP dovecot2 configuration.";
+      description = ''
+        Path to a file of Dovecot LDAP settings (`ldap_uris`,
+        `passdb_ldap_bind`, ...), included inside `passdb ldap { }`.
+      '';
     };
 
     oauth2-conf = mkOption {
       type = nullOr str;
       default = null;
       description = ''
-        Path to a Dovecot oauth2 passdb args file for the SASL-only Dovecot.
-        When set, submission also accepts XOAUTH2 / OAUTHBEARER tokens, and
+        Path to a file of Dovecot `oauth2_*` settings for the SASL-only
+        Dovecot, included at the top level of its config. When set, submission also accepts XOAUTH2 / OAUTHBEARER tokens, and
         the LDAP passdb is limited to PLAIN and LOGIN.
       '';
     };
@@ -302,11 +305,17 @@ in {
           # module's enableImap default, which stood up a real IMAP
           # listener with `ssl = no` and plaintext auth permitted. Nothing
           # published it outside the container, but nothing needed it
-          # either. `ssl`/`disable_plaintext_auth` stay as they are: left
-          # unsaid, Dovecot 2.3 defaults ssl to yes with no cert to serve.
+          # either. `ssl`/`auth_allow_cleartext` stay as they are: left
+          # unsaid, Dovecot defaults ssl to yes with no cert to serve.
+          # Cleartext is fine here: Postfix only offers AUTH over TLS, and
+          # hands the credentials over a local socket.
           protocols = "";
           ssl = "no";
-          disable_plaintext_auth = false;
+          auth_allow_cleartext = true;
+
+          dovecot_config_version = "2.4.5";
+          # Nothing is stored, but 2.4 refuses to start without it.
+          dovecot_storage_version = "2.4.5";
 
           # Only when OAuth2 is configured; otherwise the module default
           # (plain login) stands, as before.
@@ -327,19 +336,19 @@ in {
             ${optionalString cfg.debug "auth_debug = yes"}
 
             # When looking up usernames, just use the name, not the full address
-            auth_username_format = %n
+            auth_username_format = %{user | username}
 
             ${optionalString (cfg.oauth2-conf != null) ''
-              passdb {
-                driver = oauth2
-                mechanisms = xoauth2 oauthbearer
-                args = ${cfg.oauth2-conf}
+              # oauth2_* settings must be top-level; the passdb does not see
+              # them from inside its own section.
+              !include ${cfg.oauth2-conf}
+              passdb oauth2 {
+                mechanisms_filter = xoauth2 oauthbearer
               }
             ''}
-            passdb {
-              driver = ldap
-              ${optionalString (cfg.oauth2-conf != null) "mechanisms = plain login"}
-              args = ${cfg.ldap-conf}
+            passdb ldap {
+              ${optionalString (cfg.oauth2-conf != null) "mechanisms_filter = plain login"}
+              !include ${cfg.ldap-conf}
             }
 
             service auth {
@@ -352,7 +361,7 @@ in {
 
             service auth-worker {
               user = ${dovecotUser}
-              idle_kill = 3s
+              idle_kill_interval = 3s
             }
           '')
         ];

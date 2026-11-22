@@ -698,41 +698,39 @@ systemd.timers.mail-health-check = {
 
 ### 25. Dovecot 2.4 Migration
 
-**Priority**: HIGH (deferred, not optional)
+**Priority**: HIGH
 
-**Status**: Deferred. `dovecot.nix` pins `pkgs.dovecot_2_3` so it keeps running
-on nixpkgs 26.05, which defaults to Dovecot 2.4.
+**Status**: DONE in config, pending deployment. Both Dovecot instances (imap
+and the smtp container's SASL-only one) run `pkgs.dovecot` 2.4 with
+`pkgs.dovecot_pigeonhole`. What changed:
 
-**Background**: 26.05 ships Dovecot 2.4.5 and rewrote the NixOS module around a
-freeform `services.dovecot2.settings`. The module migration is done (see the
-26.05 fixes in dovecot.nix); what is NOT done is the move to 2.4 itself, which
-is a genuine breaking change:
+- **Config language** translated: `%{user}`/`%{user | username}`,
+  `mail_driver`/`mail_path` (plus an explicit `mailbox_list_layout =
+  maildir++`, since 2.4 defaults to `fs`), named `passdb`/`userdb` sections,
+  `ssl_server_*`, `auth_allow_cleartext`.
+- **LDAP / OAuth2 secret files** (assembled in `mail-server.nix`) are now
+  Dovecot settings fragments, `!include`d, instead of 2.3 `args` files. The
+  LDAP passdb needs a `filter` even with bind-to-DN; the `oauth2_*` settings
+  must sit at top level.
+- **old_stats removed**, along with `prometheus-dovecot-exporter`. The stats
+  service serves OpenMetrics on the same port (5036), so `/metrics/dovecot`
+  is unchanged as a URL; metric names changed (`dovecot_auth_success_total`,
+  `dovecot_imap_command_total{cmd_name=...}`, ...).
+- **FTS**: flatcurve is built into 2.4; the external plugin is gone. The 2.3
+  `decode2text.sh` example is no longer shipped, so a working replacement
+  (PDF + zip-based office formats) is built in `dovecot.nix`.
+- **Sieve**: `sieve_script` blocks; imapsieve spam/ham via `mailbox Junk` /
+  `imapsieve_from Junk`. Compiled global scripts go to `state/sieve-bin`.
+- **Quota**: `quota_storage_size`, `quota_storage_extra` on Trash, a real
+  `service quota-warning` (the 2.3 config pointed `quota_warning` at a
+  script path, so warnings never fired), and the `count` driver.
+- **Static userdb** now sets `static_allow_all_users`, without which LMTP
+  could not resolve users once the passdbs carried `mechanisms_filter`.
 
-- **Config language**: `%u`/`%n` become `%{user}`/`%{user|username}`;
-  `mail_location` splits into `mail_driver` + `mail_path`; `passdb`/`userdb`
-  become named sections (`passdb ldap { ... }`); quota settings were rewritten.
-- **old_stats is gone.** Everything under `service old-stats`, the
-  `old_stats_*` plugin settings, the `old_stats` mail plugin and the
-  `services.prometheus.exporters.dovecot` socket it feeds all depend on it.
-  Metrics have to be rebuilt on 2.4's own stats/metrics support.
-- **fts-flatcurve does not exist for 2.4** -- full-text search moved into
-  Dovecot proper. nixpkgs builds `dovecot-fts-flatcurve` against `dovecot_2_3`
-  only. The `fts`/`fts_flatcurve` mail plugins and the whole `plugin { fts... }`
-  block need replacing with 2.4's built-in FTS.
-- **Pigeonhole**: `pkgs.dovecot_pigeonhole` is the 2.4 build; the pin uses
-  `dovecot_pigeonhole_0_5`. Sieve settings changed shape in 2.4 as well.
-
-**Why it can't wait forever**: `dovecot_2_3` is the outgoing branch (2.3.21.1,
-upstream has moved on) and will not stay in nixpkgs indefinitely. This should
-be scheduled into a maintenance window with a test deployment, not done under
-pressure when the package disappears.
-
-**Approach**: migrate on a test host first, with a real mailbox and a real
-client. Suggested order: config-language translation -> FTS -> metrics ->
-Sieve, verifying IMAP login, LMTP delivery, spam/ham learning and search at
-each step.
-
-**Estimated Effort**: 1-3 days, plus a deployment window.
+**Cutover notes**: expect a full FTS reindex (`doveadm fts rescan -A`, then
+`doveadm index -A -q '*'`) and a one-off vsize scan by the `count` quota
+driver. `dovecot_storage_version = 2.3.0` keeps rollback possible; bump to
+2.4.0 later.
 
 ---
 
@@ -781,7 +779,7 @@ Ordered by what would most improve the deployment, not by item number.
 | 21 | Webmail | OPEN | Also the strongest reason to add OAuth. |
 | 22 | SRS | OPEN | `useSrs` was removed upstream in favour of `services.pfix-srsd`. |
 | 24 | Health checks | OPEN | |
-| 25 | Dovecot 2.4 migration | OPEN | Deferred, not optional — `dovecot_2_3` will not stay in nixpkgs forever. Schedule it; do any OAuth work as part of it. |
+| 25 | Dovecot 2.4 migration | PARTIAL | Config migrated and exercised against 2.4.5 (delivery, Sieve, FTS, quota, LDAP, OAuth2, metrics); awaiting deployment on germany. |
 
 ### Not in this list
 

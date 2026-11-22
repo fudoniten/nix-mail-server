@@ -327,7 +327,7 @@ published — on `metrics-port`, default 5034:
 | Scrape URL | Proxied to |
 | --- | --- |
 | `http://<host>:5034/metrics/postfix` | `smtp:5035` |
-| `http://<host>:5034/metrics/dovecot` | `imap:5036` |
+| `http://<host>:5034/metrics/dovecot` | `imap:5036` (Dovecot 2.4's native OpenMetrics endpoint; metrics are the `metric` blocks in `dovecot.nix`) |
 | `http://<host>:5034/metrics/rspamd` | `antispam:11336` (rspamd's native OpenMetrics endpoint) |
 
 No other path is proxied; anything else returns 404.
@@ -648,10 +648,11 @@ arion -p mail-server ps
 - **Arion**: unpinned (`github:hercules-ci/arion`), following this flake's
   nixpkgs.
 - **Postfix**: System default (via NixOS)
-- **Dovecot**: pinned to 2.3 (`pkgs.dovecot_2_3`), NOT the system default --
-  nixpkgs 26.05 defaults to 2.4, which is a breaking change for this
-  configuration. See TODO.md item 25 for the migration; the pin also forces
-  `dovecot_pigeonhole_0_5` and is why `dovecot-fts-flatcurve` still works.
+- **Dovecot**: 2.4 (`pkgs.dovecot` + `pkgs.dovecot_pigeonhole`), named
+  explicitly because the NixOS module picks 2.3 for older stateVersions.
+  Full-text search is Dovecot's built-in flatcurve (Xapian).
+  `dovecot_storage_version` is held at 2.3.0 so a rollback to the last 2.3
+  generation can still read the store; raise it once 2.4 has proven out.
 - **Rspamd**: System default (via NixOS)
 - **ClamAV**: System default (via NixOS)
 - **OpenDKIM**: System default (via NixOS)
